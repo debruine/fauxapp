@@ -13,8 +13,17 @@ ui <- dashboardPage(
     ),
     column(4,
            actionButton("new_data", "New Data"),
-           selectInput("W1", "How many levels does within-subject factor 1 have?", 2:10),
-           selectInput("B1", "How many levels does between-subject factor 1 have?", 2:10),
+           downloadButton("download_data", "Download Data"),
+           box(title = "Within-subject Factors",
+               width = 12, collapsible = TRUE, solidHeader = TRUE,
+               selectInput("within_n", "How many?", 0:5),
+               uiOutput("within_levels")
+           ),
+           box(title = "Between-subject Factors",
+               width = 12, collapsible = TRUE, solidHeader = TRUE,
+               selectInput("between_n", "How many?", 0:5),
+               uiOutput("between_levels")
+           ),
            box(title = "Cell parameters", solidHeader = TRUE,
                collapsible = TRUE, width = 12,
                textInput("n", "n (per cell)", 100),
@@ -38,6 +47,33 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output, session) {
+  # within_n ----
+  within_ui <- eventReactive(input$within_n, {
+    message("--within_n: ", input$within_n)
+    wn <- as.integer(input$within_n)
+
+    lapply(seq_len(wn), function(i) {
+      id <- paste0("W", i)
+      label <- sprintf("How many levels does within-subject factor %s have?", i)
+      selectInput(id, label, 2:10)
+    }) %>%
+      tagList()
+  })
+
+  between_ui <- eventReactive(input$between_n, {
+    message("--between_n: ", input$between_n)
+    wn <- as.integer(input$between_n)
+
+    lapply(seq_len(wn), function(i) {
+      id <- paste0("B", i)
+      label <- sprintf("How many levels does between-subject factor %s have?", i)
+      selectInput(id, label, 2:10)
+    }) %>%
+      tagList()
+  })
+
+
+  # parameters ----
   n <- reactive({
     strsplit(input$n, "\\s*,\\s*")[[1]] %>% as.numeric()
   })
@@ -54,14 +90,34 @@ server <- function(input, output, session) {
     strsplit(input$r, "\\s*,\\s*")[[1]] %>% as.numeric()
   })
 
+  # within ----
+  within <- reactive({
+    wn <- as.integer(input$within_n)
+
+    sapply(seq_len(wn), function(i) {
+      id <- paste0("W", i)
+      as.integer(input[[id]])
+    })
+  })
+
+  # between ----
+  between <- reactive({
+    bn <- as.integer(input$between_n)
+
+    sapply(seq_len(bn), function(i) {
+      id <- paste0("B", i)
+      as.integer(input[[id]])
+    })
+  })
+
   # sim_data ----
   sim_data <- eventReactive(input$new_data, {
     print("--sim_data--")
 
     tryCatch( {
       sim_design(
-        within = as.integer(input$W1),
-        between = as.integer(input$B1),
+        within = within(),
+        between = between(),
         n = n(),
         mu = mu(),
         sd = sd(),
@@ -83,6 +139,8 @@ server <- function(input, output, session) {
   })
 
   # outputs ----
+  output$within_levels <- renderUI( within_ui() )
+  output$between_levels <- renderUI( between_ui() )
   output$design_plot <- renderPlot({
     req(sim_data())
     plot(sim_data())
@@ -95,6 +153,14 @@ server <- function(input, output, session) {
     req(sim_data())
     get_params(sim_data())
   })
+  output$download_data <- downloadHandler(
+    filename = function() {
+      "data.csv"
+    },
+    content = function(file) {
+      readr::write_csv(sim_data(), file)
+    }
+  )
 }
 
 shinyApp(ui, server)
