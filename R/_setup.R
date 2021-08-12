@@ -1,0 +1,5 @@
+library(shiny)
+library(shinydashboard)
+library(faux)
+library(DT)
+faux_options(plot = FALSE)
