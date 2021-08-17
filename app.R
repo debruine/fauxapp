@@ -1,6 +1,6 @@
 ui <- dashboardPage(
   title = "Faux",
-  skin = "blue",
+  skin = "purple",
   dashboardHeader(title = "Faux"),
   dashboardSidebar(disable = TRUE),
   dashboardBody(
@@ -11,68 +11,39 @@ ui <- dashboardPage(
       tags$link(rel = "stylesheet", type = "text/css", href = "custom.css"),
       tags$script(src = "custom.js")
     ),
-    column(4,
-           actionButton("new_data", "New Data"),
-           downloadButton("download_data", "Download Data"),
-           box(title = "Within-subject Factors",
-               width = 12, collapsible = TRUE, solidHeader = TRUE,
-               selectInput("within_n", "How many?", 0:5),
-               uiOutput("within_levels")
-           ),
-           box(title = "Between-subject Factors",
-               width = 12, collapsible = TRUE, solidHeader = TRUE,
-               selectInput("between_n", "How many?", 0:5),
-               uiOutput("between_levels")
-           ),
-           box(title = "Cell parameters", solidHeader = TRUE,
-               collapsible = TRUE, width = 12,
-               textInput("n", "n (per cell)", 100),
-               textInput("mu", "mu", 0),
-               textInput("sd", "sd", 1),
-               textInput("r", "r", 0)
-           ),
-           radioButtons("empirical", "Are there parameters decribing the population or sample parameters?",
-                        choices = c("population" = FALSE, "sample" = TRUE),
-                        inline = TRUE),
-           radioButtons("long", "Data format",
-                        choices = c("wide" = FALSE, "long" = TRUE),
-                        inline = TRUE)
-    ),
-    column(8,
-           plotOutput("design_plot"),
-           tableOutput("params_table"),
-           DTOutput("sim_data")
+    fluidRow(
+      column(4,
+             box(width = 12,
+               actionButton("new_data", "New Data"),
+               downloadButton("download_data", "Download Data")
+             ),
+             factorUI("within", "Within-subject Factors"),
+             factorUI("between", "Between-subject Factors"),
+             param_box("Cell parameters",
+                 textInput("n", "n (per cell)", 100),
+                 textInput("mu", "mu", 0),
+                 textInput("sd", "sd", 1),
+                 textInput("r", "r", 0)
+             ),
+             param_box("Other",
+                       awesomeRadio("empirical", "Parameters decribe the...",
+                            choices = c("population" = FALSE, "sample" = TRUE),
+                            inline = TRUE),
+                       awesomeRadio("long", "Data format",
+                            choices = c("wide" = FALSE, "long" = TRUE),
+                            inline = TRUE)
+               )
+      ),
+      column(8,
+             plotOutput("design_plot"),
+             tableOutput("params_table"),
+             DTOutput("sim_data")
+      )
     )
   )
 )
 
 server <- function(input, output, session) {
-  # within_n ----
-  within_ui <- eventReactive(input$within_n, {
-    message("--within_n: ", input$within_n)
-    wn <- as.integer(input$within_n)
-
-    lapply(seq_len(wn), function(i) {
-      id <- paste0("W", i)
-      label <- sprintf("How many levels does within-subject factor %s have?", i)
-      selectInput(id, label, 2:10)
-    }) %>%
-      tagList()
-  })
-
-  between_ui <- eventReactive(input$between_n, {
-    message("--between_n: ", input$between_n)
-    wn <- as.integer(input$between_n)
-
-    lapply(seq_len(wn), function(i) {
-      id <- paste0("B", i)
-      label <- sprintf("How many levels does between-subject factor %s have?", i)
-      selectInput(id, label, 2:10)
-    }) %>%
-      tagList()
-  })
-
-
   # parameters ----
   n <- reactive({
     strsplit(input$n, "\\s*,\\s*")[[1]] %>% as.numeric()
@@ -90,25 +61,9 @@ server <- function(input, output, session) {
     strsplit(input$r, "\\s*,\\s*")[[1]] %>% as.numeric()
   })
 
-  # within ----
-  within <- reactive({
-    wn <- as.integer(input$within_n)
-
-    sapply(seq_len(wn), function(i) {
-      id <- paste0("W", i)
-      as.integer(input[[id]])
-    })
-  })
-
-  # between ----
-  between <- reactive({
-    bn <- as.integer(input$between_n)
-
-    sapply(seq_len(bn), function(i) {
-      id <- paste0("B", i)
-      as.integer(input[[id]])
-    })
-  })
+  # factors ----
+  within <- factorServer("within")
+  between <- factorServer("between")
 
   # sim_data ----
   sim_data <- eventReactive(input$new_data, {
@@ -139,8 +94,6 @@ server <- function(input, output, session) {
   })
 
   # outputs ----
-  output$within_levels <- renderUI( within_ui() )
-  output$between_levels <- renderUI( between_ui() )
   output$design_plot <- renderPlot({
     req(sim_data())
     plot(sim_data())
