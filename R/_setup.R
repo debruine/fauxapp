@@ -1,5 +1,6 @@
 library(shiny)
 library(shinydashboard)
+library(shinyjs)
 library(faux)
 library(DT)
 library(shinyWidgets)
@@ -33,6 +34,24 @@ param_box <- function(title, ..., collapsed = TRUE) {
       collapsed = collapsed,
       solidHeader = TRUE,
       ...)
+}
+
+# make text inputs for n level labels
+level_labels <- function(n = 10) {
+  lapply(1:n, function(i) {
+    nm <- paste0("level_name_", i)
+    ph <- paste0("level_", i)
+    table_label <- textInput(nm, NULL, placeholder = ph)
+
+    nm <- paste0("level_display_", i)
+    ph <- paste0("Level ", i, " Display Label")
+    display_label <- textInput(nm, NULL, placeholder = ph)
+
+    fluidRow(id = paste0("label_row_", i),
+      column(4, table_label),
+      column(8, display_label)
+    )
+  })
 }
 
 
