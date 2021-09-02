@@ -4,10 +4,10 @@ $(document).on("shiny:connected", function() {
     Shiny.setInputValue("window_width", window.innerWidth);
     Shiny.setInputValue("window_height", window.innerHeight);
   }
-  
+
   window.onresize = shiny_size;
   shiny_size(); // trigger once at start
-  
+
   // collapse box by ID
   closeBox = function(boxid) {
     var box = $('#' + boxid).closest('.box');
@@ -29,6 +29,13 @@ $(document).on("shiny:connected", function() {
     $(this).closest('.box')
            .find('[data-widget=collapse]')
            .click();
+  });
+
+  // update input when curent_factors button clicked
+  $("#current_factors").on('click', 'button', function() {
+    var val = $(this).text();
+
+    Shiny.setInputValue("edit_factor", val, {priority: "event"});
   });
 
 });

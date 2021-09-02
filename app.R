@@ -1,3 +1,4 @@
+# ui ----
 ui <- dashboardPage(
   title = "Faux",
   skin = "purple",
@@ -14,9 +15,16 @@ ui <- dashboardPage(
     fluidRow(
       column(4,
              box(width = 12,
+               actionButton("demo_data", "Demo Data"),
                actionButton("new_data", "New Data"),
+               actionButton("clear_design", "Clear Design"),
                downloadButton("download_data", "Download Data")
              ),
+             ## current factors ----
+             param_box("Current Factors", collapsed = FALSE,
+                       uiOutput("current_factors")
+             ),
+             ## new factor ----
              param_box("New Factor", collapsed = FALSE,
                        radioGroupButtons("factor_type",
                          choices = c("within", "between"),
@@ -36,10 +44,11 @@ ui <- dashboardPage(
                        actionButton("add_factor", "Add Factor",
                                     icon = icon("plus")),
                        actionButton("delete_factor", "Delete Factor",
-                                    icon = icon("minus"))
+                                    icon = icon("minus")),
+                       actionButton("reset_factor", "Reset",
+                                    icon = icon("broom"))
              ),
-             #factorUI("within", "Within-subject Factors"),
-             #factorUI("between", "Between-subject Factors"),
+             # cell parameters ----
              param_box("Cell parameters",
                  textInput("n", "n (per cell)", 100),
                  textInput("mu", "mu", 0),
@@ -69,6 +78,20 @@ ui <- dashboardPage(
 server <- function(input, output, session) {
   within <- reactiveVal(list())
   between <- reactiveVal(list())
+
+  # demo_data ----
+  observeEvent(input$demo_data, {
+    w <- list(time = c(am = "Morning", pm = "Evening"))
+    b <- list(pets = c(cat = "Kittens", dog = "Puppies", ferret = "Slinkies"))
+    within(w)
+    between(b)
+
+    updateTextInput(session, "n", value = "30")
+    updateTextInput(session, "mu", value = "1,2,3,4,5,6")
+    updateTextInput(session, "sd", value = "2")
+    updateTextInput(session, "r", value = "0.5")
+    updateAwesomeRadio(session, "empirical", selected = "sample")
+  })
 
   # parameters ----
   n <- reactive({
@@ -101,33 +124,86 @@ server <- function(input, output, session) {
     lapply(to_hide, hide)
   })
 
+  # edit_factor ----
+  observeEvent(input$edit_factor, {
+    factors <- c(within(), between())
+    levels <- factors[[input$edit_factor]]
+
+    # update new factor box inputs
+    factor_type <- if (input$edit_factor %in% names(within())) "within" else "between"
+    updateRadioGroupButtons(session, "factor_type", selected = factor_type)
+    updateTextInput(session, "factor_name", value = input$edit_factor)
+    n <- length(levels)
+    updatePickerInput(session, "levels_n", selected = n)
+
+    for (i in 1:n) {
+      updateTextInput(session, paste0("level_name_", i), value = names(levels)[[i]])
+      updateTextInput(session, paste0("level_display_", i), value = levels[[i]])
+    }
+
+    updateTextInput(session, "edit_factor", value = NULL)
+  })
+
   # add_factor ----
   observeEvent(input$add_factor, {
+    # check factor_name is set
+    factor_name <- trimws(input$factor_name)
+    if (factor_name == "") return()
+
     # get list of level names and display
     level_names <- paste0("level_name_", 1:input$levels_n) %>%
-      lapply(function(x) input[[x]])
+      lapply(function(x) input[[x]]) %>%
+      trimws()
     level_displays <- paste0("level_display_", 1:input$levels_n) %>%
-      lapply(function(x) input[[x]])
+      lapply(function(x) input[[x]]) %>%
+      trimws()
 
+    # quit if any level names are missing
+    if (any(level_names == "")) return()
+
+    # replace missing level display names with level names
+    level_displays <- ifelse(level_displays == "", level_names, level_displays)
+
+    # remove any old factor with the same name
+    w <- within()
+    b <- between()
+    w[[factor_name]] <- NULL
+    b[[factor_name]] <- NULL
     # update within/between
     if (input$factor_type == "within") {
-      old_factors <- within()
+      w[[factor_name]] <- setNames(level_displays, level_names)
     } else {
-      old_factors <- between()
-    }
-    old_factors[[input$factor_name]] <- setNames(level_displays, level_names)
-
-    if (input$factor_type == "within") {
-      within(old_factors)
-    } else {
-      between(old_factors)
+      b[[factor_name]] <- setNames(level_displays, level_names)
     }
 
+    within(w)
+    between(b)
+
+    reset_factor_box()
+  })
+
+  # reset_factor ----
+  observeEvent(input$reset_factor, {
+    reset_factor_box()
+  })
+
+  reset_factor_box <- function() {
     # reset factor box
     c("factor_name", "factor_display",
       paste0("level_name_", 1:10),
       paste0("level_display_", 1:10)) %>%
-        lapply(shinyjs::reset)
+      lapply(shinyjs::reset)
+  }
+
+  # delete_factor ----
+  observeEvent(input$delete_factor, {
+    # remove any old factor with the same name
+    w <- within()
+    b <- between()
+    w[[input$factor_name]] <- NULL
+    b[[input$factor_name]] <- NULL
+    within(w)
+    between(b)
   })
 
   # sim_data ----
@@ -173,22 +249,33 @@ server <- function(input, output, session) {
   })
 
   # outputs ----
+  ## design_plot ----
   output$design_plot <- renderPlot({
     req(sim_data())
     plot(sim_data())
   }, res = 96)
+
+  ## sim_data ----
   output$sim_data <- renderDT({
     req(display_data())
-
     display_data()
-
-
   })
+
+  ## params_table ----
   output$params_table <- renderTable({
     req(sim_data())
     show("long")
     get_params(sim_data())
   })
+
+  # current_factors ----
+  output$current_factors <- renderUI({ message("update current factors")
+    factor_names <- c(names(within()), names(between()))
+
+    lapply(factor_names, tags$button)
+  })
+
+  # download_data ----
   output$download_data <- downloadHandler(
     filename = function() {
       "data.csv"
