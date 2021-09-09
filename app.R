@@ -246,7 +246,7 @@ server <- function(input, output, session) {
 
     # TODO: cancel function if within_factor_n == 0
     # so table doesn't flash update
-    if (isTRUE(input$long) && within_factor_n>0) {
+    if (input$long == "TRUE" && within_factor_n>0) {
       wide2long(sim_data())
     } else {
       sim_data()
