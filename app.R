@@ -15,10 +15,11 @@ ui <- dashboardPage(
     fluidRow(
       column(4,
              box(width = 12,
-               actionButton("demo_data", "Load Demo"),
+               actionButton("demo_data", "2W*3B Demo"),
+               actionButton("demo_data2", "2W*2W*2B Demo"),
                actionButton("new_data", "Simulate Data"),
-               actionButton("clear_design", "Clear Design"),
-               downloadButton("download_data", "Download Data")
+               #actionButton("clear_design", "Clear Design"),
+               hidden(downloadButton("download_data", "Download Data"))
              ),
              ## current factors ----
              param_box("Current Factors", collapsed = FALSE,
@@ -83,14 +84,27 @@ server <- function(input, output, session) {
 
   # demo_data ----
   observeEvent(input$demo_data, {
-    w <- list(time = c(am = "Morning", pm = "Evening"),
-              condition = c(A = "A", B = "B"))
+    w <- list(time = c(am = "Morning", pm = "Evening"))
     b <- list(pets = c(cat = "Kittens", dog = "Puppies", ferret = "Slinkies"))
     within(w)
     between(b)
 
+    updateTextInput(session, "n", value = "30, 20, 10")
+    updateTextInput(session, "mu", value = paste(1:6, collapse = ", "))
+    updateTextInput(session, "sd", value = "1")
+    updateTextInput(session, "r", value = "0.5")
+    updateAwesomeRadio(session, "empirical", selected = "sample")
+  })
+
+  observeEvent(input$demo_data2, {
+    w <- list(time = c(am = "Morning", pm = "Evening"),
+              condition = c(A = "A", B = "B"))
+    b <- list(pets = c(cat = "Kittens", dog = "Puppies"))
+    within(w)
+    between(b)
+
     updateTextInput(session, "n", value = "30")
-    updateTextInput(session, "mu", value = "0")
+    updateTextInput(session, "mu", value = paste(1:8, collapse = ", "))
     updateTextInput(session, "sd", value = "1")
     updateTextInput(session, "r", value = "0.5")
     updateAwesomeRadio(session, "empirical", selected = "sample")
@@ -213,7 +227,9 @@ server <- function(input, output, session) {
   sim_data <- eventReactive(input$new_data, {
     print("--sim_data--")
 
-    show("long") # only show the long button after there is data to reshape
+    # only show  after there is data to reshape
+    show("long")
+    show("download_data")
 
     tryCatch( {
       sim_design(
