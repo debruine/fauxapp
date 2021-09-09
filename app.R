@@ -62,14 +62,16 @@ ui <- dashboardPage(
                )
       ),
       column(8,
-             plotOutput("design_plot"),
-             tableOutput("params_table"),
-             hidden(
-               awesomeRadio("long", "Data format",
-                            choices = c("wide" = FALSE, "long" = TRUE),
-                            inline = TRUE)
-             ),
-             DTOutput("sim_data")
+             tabsetPanel(type = "tabs",
+                         tabPanel("Design Parameters", DTOutput("design_params_table")),
+                         tabPanel("Plot", plotOutput("design_plot")),
+                         tabPanel("Simulated Parameters", DTOutput("data_params_table")),
+                         tabPanel("Data",
+                                  hidden(awesomeRadio("long", "Data format",
+                                                      choices = c("wide" = FALSE, "long" = TRUE),
+                                                      inline = TRUE)),
+                                  DTOutput("sim_data"))
+             )
       )
     )
   )
@@ -81,14 +83,15 @@ server <- function(input, output, session) {
 
   # demo_data ----
   observeEvent(input$demo_data, {
-    w <- list(time = c(am = "Morning", pm = "Evening"))
+    w <- list(time = c(am = "Morning", pm = "Evening"),
+              condition = c(A = "A", B = "B"))
     b <- list(pets = c(cat = "Kittens", dog = "Puppies", ferret = "Slinkies"))
     within(w)
     between(b)
 
     updateTextInput(session, "n", value = "30")
-    updateTextInput(session, "mu", value = "1,2,3,4,5,6")
-    updateTextInput(session, "sd", value = "2")
+    updateTextInput(session, "mu", value = "0")
+    updateTextInput(session, "sd", value = "1")
     updateTextInput(session, "r", value = "0.5")
     updateAwesomeRadio(session, "empirical", selected = "sample")
   })
@@ -210,6 +213,8 @@ server <- function(input, output, session) {
   sim_data <- eventReactive(input$new_data, {
     print("--sim_data--")
 
+    show("long") # only show the long button after there is data to reshape
+
     tryCatch( {
       sim_design(
         within = within(),
@@ -261,11 +266,89 @@ server <- function(input, output, session) {
     display_data()
   })
 
-  ## params_table ----
-  output$params_table <- renderTable({
-    req(sim_data())
-    show("long")
-    get_params(sim_data())
+  ## data_params_table ----
+  data_params_table <- reactiveVal()
+
+  observeEvent(sim_data(), {
+    message("update data_params_table")
+
+    within_factors <- names(within())
+
+    new_table <- get_params(sim_data()) %>%
+      tidyr::separate(var, into = within_factors, sep = "_") %>%
+      dplyr::select(n, everything())
+
+    data_params_table(new_table)
+  })
+
+  output$data_params_table <- renderDT({
+    data_params_table()
+  }, rownames = FALSE,
+  select = "none",
+  options = list(
+    info = FALSE,
+    lengthChange = FALSE,
+    paging = FALSE,
+    ordering = FALSE,
+    searching = FALSE,
+    pageLength = 500,
+    keys = TRUE
+  ))
+
+  ## design_params_table ----
+  design_params_table <- reactiveVal()
+
+  observeEvent(sim_data(), {
+    message("design_params_table updated by sim_data")
+
+    params <- attr(sim_data(), "design")$params
+
+    # update parameter boxes
+    updateTextInput(session, "mu", value = paste(params$mu, collapse = ", "))
+    updateTextInput(session, "sd", value = paste(params$sd, collapse = ", "))
+
+    new_design_table <- dplyr::select(params, n, everything())
+    design_params_table(new_design_table)
+  })
+
+  output$design_params_table <- renderDT({
+    design_params_table()
+  }, rownames = FALSE,
+    selection = list(mode = "single", target = "cell"),
+    editable = TRUE,
+    options = list(
+      info = FALSE,
+      lengthChange = FALSE,
+      paging = FALSE,
+      ordering = FALSE,
+      searching = FALSE,
+      pageLength = 500,
+      keys = TRUE
+    ))
+
+  ## design_params_table edit ----
+  observeEvent(input$design_params_table_cell_edit, {
+    cell <- input$design_params_table_cell_edit
+
+    col_name <- names(design_params_table())[[cell$col+1]]
+    old_cell <- design_params_table()[cell$row, cell$col+1]
+
+    if (col_name %in% c("mu", "sd")) {
+      old_table <- design_params_table()
+      old_table[cell$row, cell$col+1] <- cell$value
+      message("design_params_table updated by edit")
+      design_params_table(old_table)
+    }
+
+    # update boxes
+    updateTextInput(session, "mu", value = paste(design_params_table()$mu, collapse = ", "))
+    updateTextInput(session, "sd", value = paste(design_params_table()$sd, collapse = ", "))
+
+    # invalidate data until next simulation???
+
+    # check OK
+    new_cell <- design_params_table()[cell$row, cell$col+1]
+    print(glue::glue("{old_cell} -> {new_cell}"))
   })
 
   # current_factors ----

@@ -3,6 +3,7 @@ library(shinydashboard)
 library(shinyjs)
 library(faux)
 library(DT)
+library(dplyr)
 library(shinyWidgets)
 faux_options(plot = FALSE)
 
