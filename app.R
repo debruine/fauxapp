@@ -15,8 +15,8 @@ ui <- dashboardPage(
     fluidRow(
       column(4,
              box(width = 12,
-               actionButton("demo_data", "Demo Data"),
-               actionButton("new_data", "New Data"),
+               actionButton("demo_data", "Load Demo"),
+               actionButton("new_data", "Simulate Data"),
                actionButton("clear_design", "Clear Design"),
                downloadButton("download_data", "Download Data")
              ),
