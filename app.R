@@ -26,7 +26,7 @@ ui <- dashboardPage(
                        uiOutput("current_factors")
              ),
              ## new factor ----
-             param_box("New Factor", collapsed = FALSE,
+             param_box("New Factor", collapsed = FALSE, id = "new_factor_box",
                        radioGroupButtons("factor_type",
                          choices = c("within", "between"),
                          checkIcon = list(
@@ -50,7 +50,7 @@ ui <- dashboardPage(
                                     icon = icon("broom"))
              ),
              # cell parameters ----
-             param_box("Cell parameters",
+             param_box("Cell parameters", id = "cell_params_box",
                  textInput("n", "n (per cell)", 100),
                  textInput("mu", "mu", 0),
                  textInput("sd", "sd", 1),
@@ -94,6 +94,9 @@ server <- function(input, output, session) {
     updateTextInput(session, "sd", value = "1")
     updateTextInput(session, "r", value = "0.5")
     updateAwesomeRadio(session, "empirical", selected = "sample")
+
+    runjs("closeBox('new_factor_box')")
+    runjs("openBox('cell_params_box')")
   })
 
   observeEvent(input$demo_data2, {
@@ -108,19 +111,30 @@ server <- function(input, output, session) {
     updateTextInput(session, "sd", value = "1")
     updateTextInput(session, "r", value = "0.5")
     updateAwesomeRadio(session, "empirical", selected = "sample")
+
+    runjs("closeBox('new_factor_box')")
+    runjs("openBox('cell_params_box')")
   })
 
   # parameters ----
   n <- reactive({
-    strsplit(input$n, "\\s*,\\s*")[[1]] %>% as.numeric()
+    n <- strsplit(input$n, "\\s*,\\s*")[[1]] %>% as.numeric()
+    bcells <- sapply(between(), length) %>% prod()
+    rep_len(n, bcells) %>% as.list()
   })
 
   mu <- reactive({
-    strsplit(input$mu, "\\s*,\\s*")[[1]] %>% as.numeric()
+    mu <- strsplit(input$mu, "\\s*,\\s*")[[1]] %>% as.numeric()
+    bcells <- sapply(between(), length) %>% prod()
+    wcells <- sapply(within(), length) %>% prod()
+    rep_len(mu, bcells*wcells) %>% as.list()
   })
 
   sd <- reactive({
-    strsplit(input$sd, "\\s*,\\s*")[[1]] %>% as.numeric()
+    sd <- strsplit(input$sd, "\\s*,\\s*")[[1]] %>% as.numeric()
+    bcells <- sapply(between(), length) %>% prod()
+    wcells <- sapply(within(), length) %>% prod()
+    rep_len(sd, bcells*wcells) %>% as.list()
   })
 
   r <- reactive({
@@ -317,13 +331,17 @@ server <- function(input, output, session) {
   observeEvent(sim_data(), {
     message("design_params_table updated by sim_data")
 
-    params <- attr(sim_data(), "design")$params
+    design <- attr(sim_data(), "design")
 
     # update parameter boxes
-    updateTextInput(session, "mu", value = paste(params$mu, collapse = ", "))
-    updateTextInput(session, "sd", value = paste(params$sd, collapse = ", "))
+    n <- paste(design$n, collapse = ", ")
+    updateTextInput(session, "n", value = n)
+    mu <- design$mu %>% unlist() %>% paste(collapse = ", ")
+    updateTextInput(session, "mu", value = mu)
+    sd <- design$sd %>% unlist() %>% paste(collapse = ", ")
+    updateTextInput(session, "sd", value = sd)
 
-    new_design_table <- dplyr::select(params, n, everything())
+    new_design_table <- dplyr::select(design$params, n, everything())
     design_params_table(new_design_table)
   })
 
