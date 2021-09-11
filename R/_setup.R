@@ -67,8 +67,8 @@ parse_param <- function(param, len) {
     vals <- strsplit(param, "\\s*,\\s*")[[1]] %>%
       as.numeric() %>% na.omit()
   }
-  param_vals <- rep_len(vals, len) %>% as.list()
-  param_vals
+
+  rep_len(vals, len) %>% as.list()
 }
 
 dt_opts <- list(

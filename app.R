@@ -47,7 +47,6 @@ ui <- dashboardPage(
             textInput("dv_label", "Label", "value",
                       placeholder = "DV label")
           ))
-
         ),
         ### new factor ----
         param_box(
@@ -194,16 +193,20 @@ server <- function(input, output, session) {
   # demo_data ----
   observeEvent(input$demo_data, {
     w <- list(time = c(am = "Day", pm = "Night"))
-    b <-
-      list(pets = c(
+    b <- list(pets = c(
         cat = "Kittens",
         dog = "Puppies",
         ferret = "Slinkies"
-      ))
+    ))
     within(w)
     between(b)
     vardesc(list(time = "Time of Day",
                  pets = "Type of Pet"))
+
+    updateTextInput(session, "id_name", value = "id")
+    updateTextInput(session, "id_label", value = "Pet ID")
+    updateTextInput(session, "dv_name", value = "score")
+    updateTextInput(session, "dv_label", value = "Sleepiness Score")
 
     updateTextInput(session, "id_name", value = "id")
     updateTextInput(session, "id_label", value = "Pet ID")
@@ -232,6 +235,11 @@ server <- function(input, output, session) {
     vardesc(list(version = "Task Version",
                  condition = "Experiment Condition",
                  age_group = "Age Group"))
+
+    updateTextInput(session, "id_name", value = "id")
+    updateTextInput(session, "id_label", value = "Subject ID")
+    updateTextInput(session, "dv_name", value = "score")
+    updateTextInput(session, "dv_label", value = "Score")
 
     updateTextInput(session, "id_name", value = "id")
     updateTextInput(session, "id_label", value = "Subject ID")
@@ -268,10 +276,8 @@ server <- function(input, output, session) {
     name <- trimws(input$dv_name)
     label <- trimws(input$dv_label)
 
-    if (name == "")
-      name <- "y"
-    if (label == "")
-      label <- name
+    if (name == "") name <- "y"
+    if (label == "") label <- name
     setNames(label, name)
   })
 
@@ -280,10 +286,8 @@ server <- function(input, output, session) {
     name <- trimws(input$id_name)
     label <- trimws(input$id_label)
 
-    if (name == "")
-      name <- "id"
-    if (label == "")
-      label <- name
+    if (name == "") name <- "id"
+    if (label == "") label <- name
     setNames(label, name)
   })
 
@@ -305,6 +309,7 @@ server <- function(input, output, session) {
   ## r ----
   r <- reactive({
     len <- wcells() * ((wcells() - 1) / 2)
+
     parse_param(input$r, len) %>% unlist()
   })
 
@@ -427,15 +432,8 @@ server <- function(input, output, session) {
   # design/data ----
   ## clear_design ----
   observeEvent(input$clear_design, {
-    c("id_name",
-      "id_label",
-      "dv_name",
-      "dv_label",
-      "n",
-      "mu",
-      "sd",
-      "r",
-      "empirical") %>%
+    c("id_name", "id_label", "dv_name", "dv_label",
+      "n", "mu","sd", "r", "empirical") %>%
       lapply(reset)
 
     within(list())
@@ -448,10 +446,12 @@ server <- function(input, output, session) {
     message("--design--")
 
     # check names
-    col_names <- c(names(within()),
-                   names(between()),
-                   names(dv()),
-                   names(id()))
+    col_names <- c(
+      names(within()),
+      names(between()),
+      names(dv()),
+      names(id())
+    )
 
     has_dupe_names <- duplicated(col_names) %>% any()
     if (has_dupe_names) {
@@ -475,8 +475,7 @@ server <- function(input, output, session) {
       )
     }, error = function(e) {
       message(e$message)
-      modalDialog(e$message, title = "Error", easyClose = TRUE) %>%
-        showModal()
+      showNotification(e$message, duration = 30)
       return(NULL)
     })
 
@@ -496,7 +495,7 @@ server <- function(input, output, session) {
   observeEvent(input$simulate_data, {
     message("--simulate_data--")
 
-    new_sim_data <- tryCatch({
+    new_sim_data <- tryCatch( {
       sim_design(
         design = design(),
         empirical = input$empirical == "sample",
@@ -631,17 +630,17 @@ server <- function(input, output, session) {
   output$design_params_table <- renderDT({
     design_params_table()
   }, rownames = FALSE,
-  select = "none",
-  #selection = list(mode = "single", target = "cell"),
-  editable = FALSE,
-  options = dt_opts)
+     select= "none",
+     #selection = list(mode = "single", target = "cell"),
+     editable = FALSE,
+     options = dt_opts)
 
   ## data_params_table ----
   output$data_params_table <- renderDT({
     data_params_table()
   }, rownames = FALSE,
-  select = "none",
-  options = dt_opts)
+     select = "none",
+     options = dt_opts)
 
   ## sim_data ----
   output$sim_data <- renderDT({
