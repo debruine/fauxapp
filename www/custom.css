@@ -14,6 +14,10 @@
   width: 65%;
 }
 
+.display.dataTable th {
+  text-align: center;
+}
+
 @media (min-width: 768px) {
   .row .col-sm-4 {
     padding-right: 5px;

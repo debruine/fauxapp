@@ -35,7 +35,7 @@ ui <- dashboardPage(
                          placeholder = "ID column")
           ),
           column(
-            8, textInput("id_label", "Label", "id",
+            8, textInput("id_label", "ID Label", "id",
                          placeholder = "ID label")
           )),
           fluidRow(column(
@@ -44,7 +44,7 @@ ui <- dashboardPage(
           ),
           column(
             8,
-            textInput("dv_label", "Label", "value",
+            textInput("dv_label", "DVLabel", "value",
                       placeholder = "DV label")
           ))
         ),
@@ -61,15 +61,22 @@ ui <- dashboardPage(
             flex = c(4, 8),
             height = "2.5em",
             textInput("factor_name", NULL,
-                      placeholder = "name"),
+                      placeholder = "Factor Name"),
             textInput("factor_label", NULL,
-                      placeholder = "Display Name")
+                      placeholder = "Display Label")
           ),
-          pickerInput(
-            "levels_n",
+          fillRow(
+            flex = c(4, 8),
+            height = "2.5em",
             "How many levels?",
-            choices = 2:8,
-            selected = 2
+            pickerInput("levels_n", NULL,
+                        choices = 2:8, selected = 2)
+          ),
+          fillRow(
+            flex = c(4, 8),
+            height = "2em",
+            "Column Name",
+            "Display Label"
           ),
           hidden(level_labels(8)),
           actionButton("add_factor", "Add Factor",
@@ -83,12 +90,6 @@ ui <- dashboardPage(
         param_box(
           "Cell parameters",
           id = "cell_params_box",
-          awesomeRadio(
-            "empirical",
-            "Parameters decribe the...",
-            choices = c("population", "sample"),
-            inline = TRUE
-          ),
           textInput("n", "n (per cell)", 100),
           textInput("mu", "mu", 0),
           textInput("sd", "sd", 1),
@@ -100,18 +101,27 @@ ui <- dashboardPage(
         7,
         box(width = 12,
             fluidRow(
-              column(
-                6,
+              column(4,
                 actionButton("simulate_data", "Simulate Data"),
                 downloadButton("download_data", "Download Data")
               ),
-              column(6,
+              column(4,
                      awesomeRadio(
                        "long",
                        "Data format",
                        choices = c("long" = TRUE, "wide" = FALSE),
                        inline = TRUE
-                     ))
+                     ),
+                     awesomeRadio(
+                       "empirical",
+                       "Parameters decribe the...",
+                       choices = c("population", "sample"),
+                       inline = TRUE
+                     )
+
+                     ),
+              column(4,
+                     sliderInput("round", "Round values", 0, 8, 3, 1, width = "90%"))
             )),
         tabsetPanel(
           type = "tabs",
@@ -121,8 +131,21 @@ ui <- dashboardPage(
           ### design_plot ----
           tabPanel(
             "Design Plot",
-            p("The plot show means and SD for the design you specified."),
-            plotOutput("design_plot")
+            p("The plot shows means and SD for the design you specified. Violin and boxplots will show the theoretical distribution."),
+            plotOutput("design_plot"),
+            checkboxGroupButtons(
+              "design_geoms",
+              NULL,
+              choices = c("pointrangeSD",
+                          "violin",
+                          "box"),
+              selected = c("pointrangeSD"),
+              checkIcon = list(
+                yes = tags$i(class = "fa fa-check-square",
+                             style = "color: rgb(96, 92, 168)"),
+                no = tags$i(class = "fa fa-square-o",
+                            style = "color: rgb(96, 92, 168)"))
+            )
           ),
           ### data_params_table ----
           tabPanel("Data Parameters", DTOutput("data_params_table")),
@@ -155,8 +178,8 @@ ui <- dashboardPage(
             ),
 
             plotOutput("data_plot"),
-            awesomeCheckboxGroup(
-              "geoms",
+            checkboxGroupButtons(
+              "data_geoms",
               NULL,
               choices = c("pointrangeSD",
                           "pointrangeSE",
@@ -164,7 +187,11 @@ ui <- dashboardPage(
                           "box",
                           "jitter"),
               selected = c("violin", "box"),
-              inline = TRUE
+              checkIcon = list(
+                yes = tags$i(class = "fa fa-check-square",
+                             style = "color: rgb(96, 92, 168)"),
+                no = tags$i(class = "fa fa-square-o",
+                            style = "color: rgb(96, 92, 168)"))
             )
           ),
           ### sim_data ----
@@ -488,7 +515,10 @@ server <- function(input, output, session) {
     valid_design <- !is.null(design())
     toggleState("simulate_data", valid_design)
 
-    showTab(inputId = "sim_tabs", target = "Design Parameters")
+    # change tab if in a data tab
+    if (valid_design & input$sim_tabs %in% c("Data", "Data Parameters", "Data Plot", "Code")) {
+      showTab(inputId = "sim_tabs", target = "Design Parameters", select = TRUE)
+    }
   }, ignoreNULL = FALSE, ignoreInit = FALSE)
 
   ## simulate_data ----
@@ -517,10 +547,12 @@ server <- function(input, output, session) {
     message("--sim_data--")
     # only enable after there is data to reshape
     valid_data <- !is.null(sim_data())
-    toggleState("long", valid_data)
     toggleState("download_data", valid_data)
 
-    showTab(inputId = "sim_tabs", target = "Data Plot")
+    # change tab if in a design tab
+    if (valid_data & input$sim_tabs %in% c("Design Parameters", "Design Plot", "Code")) {
+      showTab(inputId = "sim_tabs", target = "Data Plot", select = TRUE)
+    }
   }, ignoreNULL = FALSE, ignoreInit = FALSE)
 
   ## display_data ----
@@ -533,10 +565,12 @@ server <- function(input, output, session) {
     # TODO: cancel function if within_factor_n == 0
     # so table doesn't flash update
     if (input$long == "TRUE" && within_factor_n > 0) {
-      wide2long(sim_data())
+      ddat <- wide2long(sim_data())
     } else {
-      sim_data()
+      ddat <- sim_data()
     }
+
+    mutate_if(ddat, is.numeric, round, input$round)
   })
 
   ## update data_params_table ----
@@ -544,14 +578,23 @@ server <- function(input, output, session) {
     message("--data_params_table--")
 
     within_factors <- names(within())
+    wn <- length(within_factors)
+    bn <- length(between())
 
-    if (length(within_factors) == 0) {
+    if (wn == 0) {
       new_table <- get_params(sim_data()) %>%
         dplyr::select(n, everything())
     } else {
-      new_table <- get_params(sim_data()) %>%
+      param_table <- get_params(sim_data()) %>%
         tidyr::separate(var, into = within_factors, sep = "_") %>%
         dplyr::select(n, everything())
+
+      # add correlation header
+      container <- ctnr(param_table, n_factors = wn+bn)
+      new_table <- DT::datatable(param_table,
+                                 container = container,
+                                 rownames = FALSE,
+                                 options = dt_opts())
     }
 
     data_params_table(new_table)
@@ -565,22 +608,21 @@ server <- function(input, output, session) {
 
     design <- design()
 
-    # update parameter boxes
-    # n <- paste(design$n, collapse = ", ")
-    # updateTextInput(session, "n", value = n)
-    # mu <- design$mu %>% unlist() %>% paste(collapse = ", ")
-    # updateTextInput(session, "mu", value = mu)
-    # sd <- design$sd %>% unlist() %>% paste(collapse = ", ")
-    # updateTextInput(session, "sd", value = sd)
-    # r <- design$r %>%
-    #   lapply(function(m) { m[upper.tri(m)] }) %>%
-    #   unlist() %>% paste(collapse = ", ")
-    # if (r == "") r <- "0"
-    # updateTextInput(session, "r", value = r)
-
-    new_design_table <- design$params %>%
+    param_table <- design$params %>%
       dplyr::select(n, everything())
-    design_params_table(new_design_table)
+
+    # add correlation header
+    if (length(design$within) == 0) {
+      new_table <- param_table
+    } else {
+      n_factors <- length(design$within) + length(design$between)
+      container <- ctnr(param_table, n_factors)
+      new_table <- DT::datatable(param_table,
+                                 container = container,
+                                 rownames = FALSE,
+                                 options = dt_opts())
+    }
+    design_params_table(new_table)
   })
 
 
@@ -615,14 +657,15 @@ server <- function(input, output, session) {
   ## design_plot ----
   output$design_plot <- renderPlot({
     req(design())
-    faux::plot_design(x = design())
+    faux::plot_design(x = design(),
+                      geoms = input$design_geoms)
   }, res = 96)
 
   ## data_plot ----
   output$data_plot <- renderPlot({
     req(sim_data())
     faux::plot_design(x = sim_data(),
-                      geoms = input$geoms,
+                      geoms = input$data_geoms,
                       palette = input$palette)
   }, res = 96)
 
@@ -633,20 +676,20 @@ server <- function(input, output, session) {
      select= "none",
      #selection = list(mode = "single", target = "cell"),
      editable = FALSE,
-     options = dt_opts)
+     options = dt_opts())
 
   ## data_params_table ----
   output$data_params_table <- renderDT({
     data_params_table()
   }, rownames = FALSE,
      select = "none",
-     options = dt_opts)
+     options = dt_opts())
 
   ## sim_data ----
   output$sim_data <- renderDT({
     req(display_data())
     display_data()
-  })
+  }, rownames = FALSE)
 
   ## current_factors ----
   output$current_factors <- renderUI({

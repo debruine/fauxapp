@@ -71,15 +71,18 @@ parse_param <- function(param, len) {
   rep_len(vals, len) %>% as.list()
 }
 
-dt_opts <- list(
-  info = FALSE,
-  lengthChange = FALSE,
-  paging = FALSE,
-  ordering = FALSE,
-  searching = FALSE,
-  pageLength = 500,
-  keys = TRUE
-)
+# options for DT tables with less stuff around them
+dt_opts <- function() {
+  list(
+    info = FALSE,
+    lengthChange = FALSE,
+    paging = FALSE,
+    ordering = FALSE,
+    searching = FALSE,
+    pageLength = 500,
+    keys = TRUE
+  )
+}
 
 # display debugging messages in R (if local)
 # and in the console log (if running in shiny)
@@ -89,6 +92,28 @@ message <- function(...) {
   txt <- toString(list(...))
   if (is_local) base::message(crayon::green(txt))
   if (in_shiny) shinyjs::runjs(sprintf("console.debug(\"%s\")", txt))
+}
+
+# make a container with a header above the correlations
+ctnr <- function(param_table, n_factors) {
+  param_cols <- names(param_table)
+  factor_cols <- param_cols[2:(1+n_factors)]
+  cor_cols <- param_cols[(2+n_factors):(ncol(param_table) - 2)]
+
+  htmltools::withTags(table(
+    thead(
+      tr(
+        th(rowspan = 2, 'n'),
+        lapply(factor_cols, th, rowspan = 2),
+        th(colspan = length(cor_cols), 'correlations'),
+        th(rowspan = 2, 'mean'),
+        th(rowspan = 2, 'sd')
+      ),
+      tr(
+        lapply(cor_cols, th)
+      )
+    )
+  ))
 }
 
 
