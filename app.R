@@ -75,8 +75,10 @@ ui <- dashboardPage(
           fillRow(
             flex = c(4, 8),
             height = "2em",
-            "Column Name",
-            "Display Label"
+            tags$strong("Level Name",
+                        style="color: rgb(96, 92, 168)"),
+            tags$strong("Display Label",
+                        style="color: rgb(96, 92, 168)")
           ),
           hidden(level_labels(8)),
           actionButton("add_factor", "Add Factor",
@@ -90,10 +92,11 @@ ui <- dashboardPage(
         param_box(
           "Cell parameters",
           id = "cell_params_box",
-          textInput("n", "n (per cell)", 100),
+          textInput("n", "n", 100),
           textInput("mu", "mu", 0),
-          textInput("sd", "sd", 1),
-          textInput("r", "r", 0)
+          textInput("sd", "sigma", 1),
+          textInput("r", "rho", 0),
+          p("Specify multiple values (up to the number in brackets), separated by commas. Values will be recycled if you don't specify enough, and dropped if you specify too many.")
         )
       ),
       ## outputs ----
@@ -340,6 +343,18 @@ server <- function(input, output, session) {
     parse_param(input$r, len) %>% unlist()
   })
 
+  ## update cell numbers ----
+  observe({
+    n_cells <- bcells()
+    f_cells <- bcells() * wcells()
+    r_cells <- wcells() * ((wcells() - 1) / 2)
+
+    updateTextInput(session, "n", glue("n ({n_cells})"))
+    updateTextInput(session, "mu", glue("mu ({f_cells})"))
+    updateTextInput(session, "sd", glue("sigma ({f_cells})"))
+    updateTextInput(session, "r", glue("rho ({r_cells})"))
+  })
+
   # factors ----
 
   ## levels_n ----
@@ -433,7 +448,7 @@ server <- function(input, output, session) {
   reset_factor_box <- function() {
     c(
       "factor_name",
-      "factor_display",
+      "factor_label",
       paste0("level_name_", 1:10),
       paste0("level_display_", 1:10)
     ) %>%
@@ -609,7 +624,7 @@ server <- function(input, output, session) {
     design <- design()
 
     param_table <- design$params %>%
-      dplyr::select(n, everything())
+      dplyr::select(n, everything(), sigma = sd)
 
     # add correlation header
     if (length(design$within) == 0) {
@@ -654,6 +669,7 @@ server <- function(input, output, session) {
   # })
 
   # outputs ----
+
   ## design_plot ----
   output$design_plot <- renderPlot({
     req(design())
@@ -724,8 +740,9 @@ server <- function(input, output, session) {
   long = {input$long}
 )")
 
-    capture.output(formatR::tidy_source(text = code, args.newline = TRUE, width.cutoff = 80)) %>%
-      paste(collapse="\n")
+    #capture.output(formatR::tidy_source(text = code, args.newline = TRUE, width.cutoff = 80)) %>%
+    #  paste(collapse="\n")
+    code
   })
 
   ## download_data ----

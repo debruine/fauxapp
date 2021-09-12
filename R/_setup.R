@@ -5,6 +5,7 @@ library(faux)
 library(DT)
 library(dplyr)
 library(shinyWidgets)
+library(glue)
 faux_options(plot = FALSE)
 
 #' Piped OR
