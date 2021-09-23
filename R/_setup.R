@@ -1,11 +1,13 @@
-library(shiny)
-library(shinydashboard)
-library(shinyjs)
-library(faux)
-library(DT)
-library(dplyr)
-library(shinyWidgets)
-library(glue)
+suppressPackageStartupMessages({
+  library(shiny)
+  library(shinydashboard)
+  library(shinyjs)
+  library(faux)
+  library(DT)
+  library(dplyr)
+  library(shinyWidgets)
+  library(glue)
+})
 faux_options(plot = FALSE)
 
 #' Piped OR
@@ -52,6 +54,23 @@ level_labels <- function(n = 8) {
     fillRow(flex = c(4, 8), height = "2.5em",
             id = paste0("label_row_", i),
             table_label,
+            display_label
+    )
+  })
+}
+
+# make text inputs for n likert labels
+likert_labels <- function(n = 8) {
+  lapply(1:n, function(i) {
+    nm <- paste0("likert_name_", i)
+    table_label <- textInput(nm, NULL, value = i)
+
+    nm <- paste0("likert_prob_", i)
+    display_label <- numericInput(nm, NULL, value = 1, min = 0)
+
+    fillRow(flex = c(6, 6), height = "2.5em",
+            id = paste0("likert_row_", i),
+            i, # table_label,
             display_label
     )
   })

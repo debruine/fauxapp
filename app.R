@@ -7,6 +7,7 @@ ui <- dashboardPage(
   dashboardBody(
     shinyjs::useShinyjs(),
     tags$head(
+      includeHTML("www/google-analytics.html"),
       # links to files in www/
       tags$link(rel = "stylesheet", type = "text/css", href = "basic_template.css"),
       tags$link(rel = "stylesheet", type = "text/css", href = "custom.css"),
@@ -97,6 +98,42 @@ ui <- dashboardPage(
           textInput("sd", "sigma", 1),
           textInput("r", "rho", 0),
           p("Specify multiple values (up to the number in brackets), separated by commas. Values will be recycled if you don't specify enough, and dropped if you specify too many.")
+        ),
+        ### distributions ----
+        # TODO: select cells to apply to
+        param_box(
+          "Distribution",
+          id = "distribution_box",
+          p("This section is very experimental. Carefully check your data if you use this."),
+          pickerInput("dv_distribution", NULL,
+                      choices = c("normal",
+                                  "truncnorm",
+                                  "likert"),
+                      selected = "normal"),
+          tags$div(id = "trunc_args",
+            numericInput("trunc_min", "Minimum", value = -1),
+            numericInput("trunc_max", "Maximum", value = 1),
+            numericInput("trunc_mu", "Mean", value = 1),
+            numericInput("trunc_sd", "SD", value = 0)
+          ),
+          tags$div(id = "likert_args",
+             fillRow(
+               flex = c(4, 8),
+               height = "2.5em",
+               "How many levels?",
+               pickerInput("likert_n", NULL,
+                           choices = 2:11, selected = 7)
+             ),
+            fillRow(
+              flex = c(4, 8),
+              height = "2em",
+              tags$strong("Scale Point Name",
+                          style="color: rgb(96, 92, 168)"),
+              tags$strong("Relative Proportion",
+                          style="color: rgb(96, 92, 168)")
+            ),
+            hidden(likert_labels(11))
+          )
         )
       ),
       ## outputs ----
@@ -360,7 +397,7 @@ server <- function(input, output, session) {
   ## levels_n ----
   observeEvent(input$levels_n, {
     to_show <- paste0("label_row_", 1:input$levels_n)
-    h <- setdiff(1:10, 1:input$levels_n)
+    h <- setdiff(1:8, 1:input$levels_n)
     to_hide <- paste0("label_row_", h)
 
     lapply(to_show, show)
@@ -541,13 +578,36 @@ server <- function(input, output, session) {
     message("--simulate_data--")
 
     new_sim_data <- tryCatch( {
-      sim_design(
+      data <- sim_design(
         design = design(),
         empirical = input$empirical == "sample",
-        long = FALSE,
+        long = TRUE,
         rep = 1,
         # nested = TRUE
       )
+
+      dv_name <- names(dv())
+
+      if (input$dv_distribution == "truncnorm") {
+        data[[dv_name]] <- norm2trunc(
+          x = data[[dv_name]],
+          min = input$trunc_min,
+          max = input$trunc_max,
+          mu = input$trunc_mu,
+          sd = input$trunc_sd)
+      } else if (input$dv_distribution == "likert") {
+        # get list of likert names and display
+        likert_prob <- paste0("likert_prob_", 1:input$likert_n) %>%
+          sapply(function(x) input[[x]]) %>%
+          unname()
+
+        data[[dv_name]] <- norm2likert(
+          x = data[[dv_name]],
+          prob = likert_prob
+        )
+      }
+
+      long2wide(data)
     }, error = function(e) {
       modalDialog(e$message, title = "Error", easyClose = TRUE) %>%
         showModal()
@@ -640,6 +700,42 @@ server <- function(input, output, session) {
     design_params_table(new_table)
   })
 
+  ## distribution ----
+  observeEvent(input$dv_distribution, {
+    message("--dv_distribution--")
+
+    show_trunc <- input$dv_distribution == "truncnorm"
+    toggle("trunc_args", condition = show_trunc)
+
+    show_likert <- input$dv_distribution == "likert"
+    toggle("likert_args", condition = show_likert)
+
+    if (show_trunc) {
+      trunc_mu <- design()$mu %>% unlist() %>% mean()
+      trunc_sd <- design()$sd %>% unlist() %>% mean()
+      trunc_min <- trunc_mu - 3*trunc_sd
+      trunc_max <- trunc_mu + 3*trunc_sd
+      updateNumericInput(session, "trunc_mu", value = trunc_mu)
+      updateNumericInput(session, "trunc_sd", value = trunc_sd)
+      updateNumericInput(session, "trunc_min", value = trunc_min)
+      updateNumericInput(session, "trunc_max", value = trunc_max)
+    }
+
+    if (show_likert) {
+
+    }
+  })
+
+  ## likert_n ----
+  observeEvent(input$likert_n, {
+    to_show <- paste0("likert_row_", 1:input$likert_n)
+    h <- setdiff(1:11, 1:input$likert_n)
+    to_hide <- paste0("likert_row_", h)
+
+    lapply(to_show, show)
+    lapply(to_hide, hide)
+  })
+
 
   ## design_params_table_cell_edit ----
   # observeEvent(input$design_params_table_cell_edit, {
@@ -679,8 +775,8 @@ server <- function(input, output, session) {
 
   ## data_plot ----
   output$data_plot <- renderPlot({
-    req(sim_data())
-    faux::plot_design(x = sim_data(),
+    req(display_data())
+    faux::plot_design(x = display_data(),
                       geoms = input$data_geoms,
                       palette = input$palette)
   }, res = 96)

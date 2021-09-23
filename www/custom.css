@@ -1,6 +1,7 @@
 /* app-specific css */
 #current_factors_box .shiny-input-container label,
-#cell_params_box .shiny-input-container label {
+#cell_params_box .shiny-input-container label,
+#distribution_box .shiny-input-container label {
   float: left;
   clear: left;
   width: 30%;
@@ -9,7 +10,8 @@
 }
 
 #current_factors_box .shiny-input-container input,
-#cell_params_box .shiny-input-container input {
+#cell_params_box .shiny-input-container input,
+#distribution_box .shiny-input-container input {
   float: left;
   width: 65%;
 }
