@@ -6,6 +6,8 @@ ui <- dashboardPage(
   dashboardSidebar(# https://fontawesome.com/icons?d=gallery&m=free
     sidebarMenu(
       id = "tabs",
+      menuItem("Multilevel", tabName = "multilevel_tab",
+               icon = icon("layer-group")),
       menuItem("Factorial", tabName = "factorial_tab",
                icon = icon("th-large"))
     ),
@@ -23,7 +25,8 @@ ui <- dashboardPage(
       tags$script(src = "custom.js")
     ),
     tabItems(
-      factorial_tab
+      factorial_tab,
+      multilevel_tab
     )
   )
 )
@@ -174,7 +177,7 @@ server <- function(input, output, session) {
     updateTextInput(session, "r", glue("rho ({r_cells})"))
   })
 
-  # factors ----
+  # factorial factors ----
 
   ## levels_n ----
   observeEvent(input$levels_n, {
@@ -546,7 +549,7 @@ server <- function(input, output, session) {
   #
   # })
 
-  # outputs ----
+  # factorial outputs ----
 
   ## design_plot ----
   output$design_plot <- renderPlot({
@@ -632,6 +635,138 @@ server <- function(input, output, session) {
       readr::write_csv(display_data(), file)
     }
   )
+
+  # multilevel simulation ----
+
+  ## reactiveVals ----
+  random_factors <- reactiveVal(list())
+  ml_data <- reactiveVal(data.frame())
+
+  ## demo_mixed ----
+  observeEvent(input$demo_mixed, {
+    random_factors(list(
+      class = list(n = 3),
+      student = list(n = 2, nested_in = "class")
+    ))
+  })
+
+  ## random_factors updates ----
+  observeEvent(random_factors(), {
+    message("--random_factors updates--")
+    click("reset_random_factor")
+
+    # toggle random_factor_type
+    toggle(id = "random_factor_type",
+           condition = length(random_factors()) > 0)
+
+    # update random_factors_nested_in choices
+    new_choices <- names(random_factors())
+    updatePickerInput(session = session,
+                      inputId = "random_factor_nested_in",
+                      choices = new_choices)
+
+    # sim data
+    new_data <- NULL
+    for (factor in names(random_factors())) {
+      message("--adding factor: ", factor)
+
+      factor_params <- random_factors()[[factor]]
+
+      args <- setNames(factor_params$n, factor) %>%
+        as.list()
+      args[[".data"]] <- new_data
+      args[[".nested_in"]] <- factor_params$nested_in
+
+      new_data <- do.call(what = add_random, args = args)
+    }
+
+    ml_data(new_data)
+  })
+
+  observeEvent(input$random_factor_type, {
+    # show nested_in if type is nested
+    toggle(id = "random_factor_nested_in",
+           condition = input$random_factor_type == "nested")
+  })
+
+  ## clear_mixed_design ----
+  observeEvent(input$clear_mixed_design, {
+    random_factors(list())
+  })
+
+  ## edit_random_factor ----
+  observeEvent(input$edit_random_factor, {
+    message("--edit_random_factor--")
+
+    factor_params <- random_factors()[[input$edit_random_factor]]
+
+    # update new factor box inputs
+    updateTextInput(session, "random_factor_name",
+                    value = input$edit_random_factor)
+    updateTextInput(session, "random_factor_n",
+                    value = factor_params$n)
+    sel <- ifelse(is.null(factor_params$nested_in), "crossed", "nested")
+    updateRadioGroupButtons(session, "random_factor_type",
+                            selected = sel)
+    updatePickerInput(session, "random_factor_nested_in",
+                      selected = factor_params$nested_in)
+
+    runjs("openBox('new_random_factor_box')")
+  })
+
+  ## add_random_factor ----
+  observeEvent(input$add_random_factor, {
+    # get existing list of random factors
+    rfs <- random_factors()
+
+    # get new factor parameters
+    factor_name <- trimws(input$random_factor_name)
+    factor_n <- as.integer(input$random_factor_n)
+    nested_in <- if (input$random_factor_type == "nested") {
+      input$random_factor_nested_in
+    } else {
+      NULL
+    }
+
+    # update list
+    rfs[[factor_name]] <- list(
+      nested_in = nested_in,
+      n = factor_n
+    )
+
+    random_factors(rfs)
+  })
+
+  ## delete_random_factor ----
+  observeEvent(input$delete_random_factor, {
+    old_rfs <- random_factors()
+
+    new_rfs <- old_rfs
+
+    random_factors(new_rfs)
+  })
+
+  ## reset_random_factor ----
+  observeEvent(input$reset_random_factor, {
+    updateRadioGroupButtons(session, "random_factor_type", selected = "crossed")
+    reset("random_factor_name")
+    reset("random_factor_n")
+  })
+
+  ## multilevel outputs ----
+
+  ### current_random_factors ----
+  output$current_random_factors <- renderUI({
+    factor_names <- names(random_factors())
+    lapply(factor_names, tags$button)
+  })
+
+  ### multilevel_data ----
+  output$multilevel_data <- renderDT({
+    ml_data()
+  }, rownames = FALSE)
+
+
 }
 
 shinyApp(ui, server)
