@@ -44,4 +44,10 @@ $(document).on("shiny:connected", function() {
     Shiny.setInputValue("edit_random_factor", val, {priority: "event"});
   });
 
+  $("#current_fixed_factors").on('click', 'button', function() {
+    var val = $(this).text();
+
+    Shiny.setInputValue("edit_fixed_factor", val, {priority: "event"});
+  });
+
 });

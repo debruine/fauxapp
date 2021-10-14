@@ -59,6 +59,25 @@ level_labels <- function(n = 8) {
   })
 }
 
+# make text inputs for n fixed level labels
+fixed_level_labels <- function(n = 8) {
+  lapply(1:n, function(i) {
+    nm <- paste0("fixed_level_name_", i)
+    ph <- paste0("level", i)
+    table_label <- textInput(nm, NULL, placeholder = ph)
+
+    nm <- paste0("fixed_level_prob_", i)
+    prob <- numericInput(nm, NULL, value = 1,
+                         min = 0, max = 1e6)
+
+    fillRow(flex = c(8, 4), height = "2.5em",
+            id = paste0("fixed_label_row_", i),
+            table_label,
+            prob
+    )
+  })
+}
+
 # make text inputs for n likert labels
 likert_labels <- function(n = 8) {
   lapply(1:n, function(i) {

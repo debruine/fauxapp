@@ -346,6 +346,7 @@ server <- function(input, output, session) {
     design(new_design)
   })
 
+  ## design change ----
   observeEvent(design(), {
     # only enable after there is a valid design
     sim_data(NULL)
@@ -640,6 +641,7 @@ server <- function(input, output, session) {
 
   ## reactiveVals ----
   random_factors <- reactiveVal(list())
+  fixed_factors <- reactiveVal(list())
   ml_data <- reactiveVal(data.frame())
 
   ## demo_mixed ----
@@ -648,25 +650,23 @@ server <- function(input, output, session) {
       class = list(n = 3),
       student = list(n = 2, nested_in = "class")
     ))
+
+    fixed_factors(list(
+      condition = list(by = NULL, levels = c("A", "B")),
+      grade = list(by = "student",
+                   levels = 1:3,
+                   shuffle = TRUE,
+                   prob = c(1, 2, 3))
+    ))
   })
 
-  ## random_factors updates ----
-  observeEvent(random_factors(), {
-    message("--random_factors updates--")
-    click("reset_random_factor")
+  ## sim data ----
+  observe({
+    if (length(random_factors()) == 0) return()
 
-    # toggle random_factor_type
-    toggle(id = "random_factor_type",
-           condition = length(random_factors()) > 0)
-
-    # update random_factors_nested_in choices
-    new_choices <- names(random_factors())
-    updatePickerInput(session = session,
-                      inputId = "random_factor_nested_in",
-                      choices = new_choices)
-
-    # sim data
     new_data <- NULL
+
+    ## add random factors
     for (factor in names(random_factors())) {
       message("--adding factor: ", factor)
 
@@ -680,21 +680,72 @@ server <- function(input, output, session) {
       new_data <- do.call(what = add_random, args = args)
     }
 
+    ## add fixed factors
+    for (factor in names(fixed_factors())) {
+      factor_params <- fixed_factors()[[factor]]
+      args <- list()
+      args[[factor]] <- factor_params$levels
+      args[[".data"]] <- new_data
+      args[[".by"]] <- factor_params$by
+
+      if (is.null(factor_params$by)) {
+        new_data <- do.call(what = add_within, args = args)
+      } else {
+        args[[".shuffle"]] <- factor_params$shuffle
+        args[[".prob"]] <- factor_params$prob
+        new_data <- do.call(what = add_between, args = args)
+      }
+    }
+
     ml_data(new_data)
   })
 
+  ## clear_mixed_design ----
+  observeEvent(input$clear_mixed_design, {
+    random_factors(list())
+    fixed_factors(list())
+    ml_data(data.frame())
+  })
+
+  ## random factors ----
+
+  ### random_factors updates ----
+  observeEvent(random_factors(), {
+    message("--random_factors updates--")
+    click("reset_random_factor")
+
+    # toggle visibility of fixed factor box
+    if (length(random_factors()) > 0) {
+      enable(id = "add_fixed_factor")
+    } else {
+      disable(id = "add_fixed_factor")
+    }
+
+    # toggle random_factor_type
+    toggle(id = "random_factor_type",
+           condition = length(random_factors()) > 0)
+
+    # update random_factors_nested_in choices
+    new_choices <- names(random_factors())
+    updatePickerInput(session = session,
+                      inputId = "random_factor_nested_in",
+                      choices = new_choices)
+
+    # update fixed_factors_by choices
+    new_choices <- names(random_factors())
+    updatePickerInput(session = session,
+                      inputId = "fixed_factor_by",
+                      choices = new_choices)
+  })
+
+  ### random_factor_nested_in show/hide ----
   observeEvent(input$random_factor_type, {
     # show nested_in if type is nested
     toggle(id = "random_factor_nested_in",
            condition = input$random_factor_type == "nested")
   })
 
-  ## clear_mixed_design ----
-  observeEvent(input$clear_mixed_design, {
-    random_factors(list())
-  })
-
-  ## edit_random_factor ----
+  ### edit_random_factor ----
   observeEvent(input$edit_random_factor, {
     message("--edit_random_factor--")
 
@@ -714,7 +765,7 @@ server <- function(input, output, session) {
     runjs("openBox('new_random_factor_box')")
   })
 
-  ## add_random_factor ----
+  ### add_random_factor ----
   observeEvent(input$add_random_factor, {
     # get existing list of random factors
     rfs <- random_factors()
@@ -737,20 +788,143 @@ server <- function(input, output, session) {
     random_factors(rfs)
   })
 
-  ## delete_random_factor ----
+  ### delete_random_factor ----
   observeEvent(input$delete_random_factor, {
-    old_rfs <- random_factors()
+    rfs <- random_factors()
 
-    new_rfs <- old_rfs
+    rfs[[input$random_factor_name]] <- NULL
 
-    random_factors(new_rfs)
+    random_factors(rfs)
   })
 
-  ## reset_random_factor ----
+  ### reset_random_factor ----
   observeEvent(input$reset_random_factor, {
     updateRadioGroupButtons(session, "random_factor_type", selected = "crossed")
     reset("random_factor_name")
     reset("random_factor_n")
+  })
+
+  ## fixed factors ----
+
+  ### fixed_levels_n ----
+  observeEvent(input$fixed_levels_n, {
+    to_show <- paste0("fixed_label_row_", 1:input$fixed_levels_n)
+    h <- setdiff(1:8, 1:input$fixed_levels_n)
+    to_hide <- paste0("fixed_label_row_", h)
+
+    lapply(to_show, show)
+    lapply(to_hide, hide)
+  })
+
+  ### fixed_factor_type ----
+  observeEvent(input$fixed_factor_type, {
+    # show nested_in if type is nested
+    toggle(id = "fixed_factor_by",
+           condition = input$fixed_factor_type == "between")
+
+    toggle(id = "fixed_factor_shuffle",
+           condition = input$fixed_factor_type == "between")
+
+    # hide / show prob
+    probs <- paste0("fixed_level_prob_", 1:8)
+    func <- ifelse(input$fixed_factor_type == "between", show, hide)
+    c(probs, "probability_header") %>%
+      lapply(func)
+  })
+
+  ### edit_fixed_factor ----
+  observeEvent(input$edit_fixed_factor, {
+    message("--edit_fixed_factor--")
+
+    factor_params <- fixed_factors()[[input$edit_fixed_factor]]
+
+    # update new factor box inputs
+    updateTextInput(session, "fixed_factor_name",
+                    value = input$edit_fixed_factor)
+    n_levels <- length(factor_params$levels)
+    updateTextInput(session, "fixed_levels_n",
+                    value = n_levels)
+    sel <- ifelse(is.null(factor_params$by), "within", "between")
+    updateRadioGroupButtons(session, "fixed_factor_type",
+                            selected = sel)
+    updatePickerInput(session, "fixed_factor_by",
+                      selected = factor_params$by)
+
+    sel <- ifelse(factor_params$shuffle, "yes", "no")
+    updateRadioGroupButtons(session, "fixed_factor_shuffle",
+                            selected = sel)
+
+    for (i in 1:n_levels) {
+      nm <- paste0("fixed_level_name_", i)
+      updateTextInput(session, nm, value = factor_params$levels[[i]])
+
+      nm <- paste0("fixed_level_prob_", i)
+      val <- factor_params$prob[[i]]
+      val <- if (is.null(val)) { 1 } else { val }
+      updateTextInput(session, nm, value = val)
+    }
+
+    runjs("openBox('new_fixed_factor_box')")
+  })
+
+  ### add_fixed_factor ----
+  observeEvent(input$add_fixed_factor, {
+    message("--add_fixed_factor--")
+    # get existing list of fixed factors
+    ffs <- fixed_factors()
+
+    level_names <- paste0("fixed_level_name_", 1:input$fixed_levels_n) %>%
+      lapply(function(x) input[[x]]) %>%
+      trimws()
+
+    level_probs <- paste0("fixed_level_prob_", 1:input$fixed_levels_n)%>%
+      lapply(function(x) input[[x]]) %>%
+      unlist() %>%
+      as.numeric()
+
+    # replace NAs with 0
+    level_probs[is.na(level_probs)] <- 0
+
+    ffs[[input$fixed_factor_name]] <- list(
+      by = if (input$fixed_factor_type == "within") { NULL } else { input$fixed_factor_by },
+      levels = level_names,
+      shuffle = input$fixed_factor_shuffle == "yes",
+      prob = level_probs
+    )
+
+    fixed_factors(ffs)
+
+    click("reset_fixed_factor")
+  })
+
+  ### fixed_factors() updates ----
+  observeEvent(fixed_factors(), {
+    message("--fixed_factors updates--")
+    click("reset_fixed_factor")
+  })
+
+  ### delete_fixed_factor ----
+  observeEvent(input$delete_fixed_factor, {
+    ffs <- fixed_factors()
+
+    ffs[[input$fixed_factor_name]] <- NULL
+
+    fixed_factors(ffs)
+  })
+
+  ### reset_fixed_factor ----
+  observeEvent(input$reset_fixed_factor, {
+    updateRadioGroupButtons(session, "fixed_factor_type", selected = "within")
+    updateRadioGroupButtons(session, "fixed_factor_shuffle", selected = "no")
+
+    reset("fixed_factor_name")
+    reset("fixed_levels_n")
+
+    paste0("fixed_level_name_", 1:8) %>%
+      lapply(reset)
+
+    paste0("fixed_level_prob_", 1:8) %>%
+      lapply(reset)
   })
 
   ## multilevel outputs ----
@@ -761,10 +935,18 @@ server <- function(input, output, session) {
     lapply(factor_names, tags$button)
   })
 
+  ### current_fixed_factors ----
+  output$current_fixed_factors <- renderUI({
+    factor_names <- names(fixed_factors())
+    lapply(factor_names, tags$button)
+  })
+
   ### multilevel_data ----
   output$multilevel_data <- renderDT({
     ml_data()
-  }, rownames = FALSE)
+  }, rownames = FALSE,
+     options = list(pageLength = 25)
+  )
 
 
 }
