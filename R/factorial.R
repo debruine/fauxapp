@@ -37,7 +37,7 @@ factorial_tab <- tabItem(tabName = "factorial_tab",
       ),
       ### new factor ----
       param_box(
-        "New Factor",
+        title = textOutput("new_factor_box_title"),
         id = "new_factor_box",
         radioGroupButtons(
           "factor_type",

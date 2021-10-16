@@ -1,4 +1,5 @@
 multilevel_tab <- tabItem(tabName = "multilevel_tab",
+  p("WARNING: This section is under construction and may be buggy. This interface does not allow random intercepts yet. Make sure you simulate data after changing the design (sometimes it doesn't auto-update)."),
   fluidRow(
     ##inputs----
     column(6,
@@ -7,29 +8,47 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
              width = 12,
              actionButton("demo_mixed", "Demo"),
              actionButton("clear_mixed_design", "Clear Design"),
+             actionButton("sim_mixed", "Simulate Data"),
              downloadButton("download_ml_data", "Download Data")
            ),
-           ### current random factors ----
+           ### current factors ----
            param_box(
              "Current Factors",
              id = "current_random_factors_box",
-             uiOutput("current_random_factors"),
-             uiOutput("current_fixed_factors")
+             fluidRow(
+               column(4, h4("Random Factors")),
+               column(8, uiOutput("current_random_factors"))
+             ),
+             fluidRow(
+               column(4, h4("Fixed Factors")),
+               column(8, uiOutput("current_fixed_factors"))
+             ),
+             textInput("mixed_dv", "DV", "dv"),
+             numericInput("intercept", "Intercept", 0),
+             numericInput("error_sd", "Error SD", 1, min = 0)
            ),
            ### new random factor ----
            param_box(
-             "New Random Factor",
+             title = textOutput("new_random_factor_box_title"),
              id = "new_random_factor_box",
-             hidden(radioGroupButtons(
-               "random_factor_type",
-               choices = c("crossed", "nested"),
-               checkIcon = list(yes = icon("ok", lib = "glyphicon"))
+             fluidRow(column(6, hidden(
+               radioGroupButtons(
+                 "random_factor_type",
+                 choices = c("crossed", "nested"),
+                 checkIcon = list(yes = icon("ok", lib = "glyphicon"))
+               )
              )),
-             hidden(pickerInput(inputId = "random_factor_nested_in",
-                         label = "Nested in",
-                         choices = c(""))),
+             column(6, hidden(
+               pickerInput(
+                 inputId = "random_factor_nested_in",
+                 label = NULL,
+                 choices = c("")
+               )
+             ))),
              textInput(inputId = "random_factor_name", label = "Name"),
              textInput(inputId = "random_factor_n", label = "How many?"),
+             numericInput(inputId = "random_intercept", label = "Intercept SD",
+                          value = 0, min = 0),
              actionButton("add_random_factor", "Add Factor",
                           icon = icon("plus")),
              actionButton("delete_random_factor", "Delete Factor",
@@ -41,7 +60,7 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
     column(6,
            ### new fixed factor ----
            param_box(
-             "New Fixed Factor",
+             title = textOutput("new_fixed_factor_box_title"),
              id = "new_fixed_factor_box",
              fluidRow(
                column(4, radioGroupButtons(
@@ -62,17 +81,27 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
               ),
              textInput(inputId = "fixed_factor_name", label = "Name"),
 
-             pickerInput(inputId = "fixed_factor_coding",
-                         label = "Contrast Coding",
-                         choices = c("anova", "sum", "treatment", "helmert", "poly", "difference"),
-                         selected = "anova"),
-
              fillRow(
                flex = c(4, 8),
                height = "2.5em",
                "How many levels?",
                pickerInput("fixed_levels_n", NULL,
                            choices = 2:8, selected = 2)
+             ),
+             fillRow(
+               flex = c(4, 8),
+               height = "2.5em",
+               "Contrast coding",
+               pickerInput(inputId = "fixed_factor_coding",
+                           label = NULL,
+                           choices = c("anova", "sum", "treatment", "helmert", "poly", "difference"),
+                           selected = "anova")
+             ),
+             fillRow(
+               flex = c(4, 8),
+               height = "2.5em",
+               "Fixed effect",
+               textInput("fixed_factor_effect", NULL, 0)
              ),
 
              fillRow(
@@ -101,5 +130,13 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
   ),
 
   ## Outputs ----
-  DTOutput("multilevel_data")
+  tabsetPanel(
+    type = "tabs",
+    id = "mixed_tabs",
+    tabPanel("Data", DTOutput("multilevel_data")),
+    tabPanel("Model",
+             actionButton("run_model", "Run Model"),
+             textAreaInput("mixed_formula", "Formula", "", rows = 1),
+             verbatimTextOutput("multi_model"))
+  )
 )

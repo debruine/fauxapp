@@ -1,19 +1,25 @@
 /* app-specific css */
 #current_factors_box .shiny-input-container label,
 #cell_params_box .shiny-input-container label,
-#distribution_box .shiny-input-container label {
+#distribution_box .shiny-input-container label,
+#current_random_factors_box .shiny-input-container label,
+#new_random_factor_box .shiny-input-container label {
   float: left;
   clear: left;
   width: 30%;
   margin-right: 5%;
   text-align: right;
+  margin-bottom: 3px;
 }
 
 #current_factors_box .shiny-input-container input,
 #cell_params_box .shiny-input-container input,
-#distribution_box .shiny-input-container input {
+#distribution_box .shiny-input-container input,
+#current_random_factors_box .shiny-input-container input,
+#new_random_factor_box .shiny-input-container input {
   float: left;
   width: 65%;
+  margin-bottom: 3px;
 }
 
 .display.dataTable th {
@@ -33,4 +39,8 @@
 
 .shiny-label-null {
   display: none !important;
+}
+
+.error {
+  border: 1px solid red;
 }

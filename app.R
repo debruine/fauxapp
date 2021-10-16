@@ -6,10 +6,10 @@ ui <- dashboardPage(
   dashboardSidebar(# https://fontawesome.com/icons?d=gallery&m=free
     sidebarMenu(
       id = "tabs",
-      menuItem("Multilevel", tabName = "multilevel_tab",
-               icon = icon("layer-group")),
       menuItem("Factorial", tabName = "factorial_tab",
-               icon = icon("th-large"))
+               icon = icon("th-large")),
+      menuItem("Multilevel", tabName = "multilevel_tab",
+               icon = icon("layer-group"))
     ),
     HTML(
       "<div style = 'padding: 1em;'>This shiny app uses the {<a href='https://debruine.github.io/faux/'>faux</a>} R package to set up a factorial or multilevel design, simulate data, and download it. [<a href='https://github.com/debruine/fauxapp'>Code on GitHub</a>]</div>"
@@ -25,8 +25,8 @@ ui <- dashboardPage(
       tags$script(src = "custom.js")
     ),
     tabItems(
-      factorial_tab,
-      multilevel_tab
+      multilevel_tab,
+      factorial_tab
     )
   )
 )
@@ -41,6 +41,7 @@ server <- function(input, output, session) {
   data_params_table <- reactiveVal()
   design_params_table <- reactiveVal()
   vardesc <- reactiveVal(list())
+  new_factor_box_title <- reactiveVal("New Factor")
 
   # demo_data ----
   observeEvent(input$demo_data, {
@@ -203,6 +204,9 @@ server <- function(input, output, session) {
     }
 
     updateTextInput(session, "edit_factor", value = NULL)
+    glue("Edit Factor ({input$edit_factor})") %>%
+      new_factor_box_title()
+    updateActionButton(session, "add_factor", "Edit Factor")
     show("new_factor_box", anim = TRUE)
   })
 
@@ -247,15 +251,11 @@ server <- function(input, output, session) {
     vd[[factor_name]] <- input$factor_label %else% factor_name
     vardesc(vd)
 
-    reset_factor_box()
+    click("reset_factor")
   })
 
   ## reset_factor ----
   observeEvent(input$reset_factor, {
-    reset_factor_box()
-  })
-
-  reset_factor_box <- function() {
     c(
       "factor_name",
       "factor_label",
@@ -263,7 +263,10 @@ server <- function(input, output, session) {
       paste0("level_display_", 1:10)
     ) %>%
       lapply(shinyjs::reset)
-  }
+
+    updateActionButton(session, "add_factor", "Add Factor")
+    new_factor_box_title("New Factor")
+  })
 
   ## delete_factor ----
   observeEvent(input$delete_factor, {
@@ -293,7 +296,7 @@ server <- function(input, output, session) {
     sim_data(NULL)
     data_params_table(NULL)
 
-    reset_factor_box()
+    click("reset_factor")
   })
 
   ## design ----
@@ -582,6 +585,9 @@ server <- function(input, output, session) {
 
   # factorial outputs ----
 
+  ## new_factor_box_title ----
+  output$new_factor_box_title <- renderText( new_factor_box_title() )
+
   ## design_plot ----
   output$design_plot <- renderPlot({
     req(design())
@@ -694,35 +700,47 @@ server <- function(input, output, session) {
   random_factors <- reactiveVal(list())
   fixed_factors <- reactiveVal(list())
   ml_data <- reactiveVal(data.frame())
+  new_random_factor_box_title <- reactiveVal("New Random Factor")
+  new_fixed_factor_box_title <- reactiveVal("New Fixed Factor")
 
   ## demo_mixed ----
   observeEvent(input$demo_mixed, {
     random_factors(list(
-      class = list(n = 3),
-      student = list(n = 2, nested_in = "class")
+      class = list(n = 30, random_intercept = 3),
+      student = list(n = 20, nested_in = "class", random_intercept = 7)
     ))
 
     fixed_factors(list(
       condition = list(by = NULL,
                        levels = c("A", "B"),
-                       coding = "anova"),
-      grade = list(by = "student",
+                       coding = "anova",
+                       effect = -20),
+      grade = list(by = "class",
                    levels = 1:3,
                    shuffle = TRUE,
                    prob = c(1, 2, 3),
-                   coding = "treatment")
+                   coding = "treatment",
+                   effect = c(5, 10))
     ))
+
+    updateTextInput(session, "mixed_dv", value = "score")
+    updateNumericInput(session, "intercept", value = 100)
+    updateNumericInput(session, "error_sd", value = 15)
+    updateTextAreaInput(session, "mixed_formula", value = "score ~ 1 + grade * condition + (1 | class) + (1 | student)")
   })
 
   ## sim mixed data ----
   observe({
+    message("--sim mixed data--")
+    input$sim_mixed # trigger on button press
+
     if (length(random_factors()) == 0) return()
 
     new_data <- NULL
 
     ## add random factors
     for (factor in names(random_factors())) {
-      message("--adding factor: ", factor)
+      #message(glue("  --adding random factor: {factor}"))
 
       factor_params <- random_factors()[[factor]]
 
@@ -732,10 +750,16 @@ server <- function(input, output, session) {
       args[[".nested_in"]] <- factor_params$nested_in
 
       new_data <- do.call(what = add_random, args = args)
+
+      # add random effects (TODO:)
+      args <- list(.data = new_data)
+      args[[paste0(".faux_i_", factor)]] <- factor_params$random_intercept
+      new_data <- do.call(what = add_ranef, args = args)
     }
 
     ## add fixed factors
     for (factor in names(fixed_factors())) {
+      #message(glue("--adding fixed factor: {factor}"))
       factor_params <- fixed_factors()[[factor]]
       args <- list()
       args[[factor]] <- factor_params$levels
@@ -753,13 +777,34 @@ server <- function(input, output, session) {
 
     ## add contrasts
     for (factor in names(fixed_factors())) {
+      #message(glue("--adding contrasts: {factor}"))
       factor_params <- fixed_factors()[[factor]]
       new_data <- faux::add_contrast(
         data = new_data,
         col = factor,
         contrast = factor_params$coding
       )
+
+      # make fixed effect columns
+      cols <- ncol(new_data)
+      n_codes <- length(factor_params$levels) - 2
+      codes <- names(new_data)[(cols - n_codes):cols]
+      for (i in seq_along(codes)) {
+        nm <- paste0(".faux_", codes[[i]])
+        new_data[[nm]] <- new_data[[codes[[i]]]] * factor_params$effect[[i]]
+      }
     }
+
+    ## add random effects
+    new_data <- new_data %>%
+      add_ranef(.faux_sigma = input$error_sd %else% 0) %>%
+      mutate(.faux_intercept = input$intercept %else% 0)
+
+    # calculate DV and remove extra columns
+    dv <- input$mixed_dv
+    new_data <- new_data %>%
+      mutate({{dv}} := rowSums(across(starts_with(".faux_"))))  %>%
+      select(-starts_with(".faux_"))
 
     ml_data(new_data)
   })
@@ -769,6 +814,11 @@ server <- function(input, output, session) {
     random_factors(list())
     fixed_factors(list())
     ml_data(data.frame())
+
+    updateTextInput(session, "mixed_dv", value = "dv")
+    updateNumericInput(session, "intercept", value = 0)
+    updateNumericInput(session, "error_sd", value = 1)
+    updateTextAreaInput(session, "mixed_formula", value = "")
   })
 
   ## random factors ----
@@ -789,12 +839,6 @@ server <- function(input, output, session) {
     toggle(id = "random_factor_type",
            condition = length(random_factors()) > 0)
 
-    # update random_factors_nested_in choices
-    new_choices <- names(random_factors())
-    updatePickerInput(session = session,
-                      inputId = "random_factor_nested_in",
-                      choices = new_choices)
-
     # update fixed_factors_by choices
     new_choices <- names(random_factors())
     updatePickerInput(session = session,
@@ -813,6 +857,15 @@ server <- function(input, output, session) {
   observeEvent(input$edit_random_factor, {
     message("--edit_random_factor--")
 
+    # don't nest inside self on in factors that are nested in self!
+    nono <- sapply(random_factors(), `[[`, "nested_in") == "class"
+    new_choices <- setdiff(names(random_factors()),
+                           c(input$edit_random_factor,
+                             names(random_factors())[nono]))
+    updatePickerInput(session = session,
+                      inputId = "random_factor_nested_in",
+                      choices = new_choices)
+
     factor_params <- random_factors()[[input$edit_random_factor]]
 
     # update new factor box inputs
@@ -820,11 +873,16 @@ server <- function(input, output, session) {
                     value = input$edit_random_factor)
     updateTextInput(session, "random_factor_n",
                     value = factor_params$n)
+    updateNumericInput(session, "random_intercept",
+                       value = factor_params$random_intercept)
     sel <- ifelse(is.null(factor_params$nested_in), "crossed", "nested")
     updateRadioGroupButtons(session, "random_factor_type",
                             selected = sel)
     updatePickerInput(session, "random_factor_nested_in",
                       selected = factor_params$nested_in)
+    glue("Edit Random Factor ({input$edit_random_factor})") %>%
+      new_random_factor_box_title()
+    updateActionButton(session, "add_random_factor", label = "Edit Factor")
 
     show("new_random_factor_box", anim = TRUE)
   })
@@ -854,7 +912,8 @@ server <- function(input, output, session) {
     # update list
     rfs[[factor_name]] <- list(
       nested_in = nested_in,
-      n = factor_n
+      n = factor_n,
+      random_intercept = input$random_intercept %else% 0
     )
 
     random_factors(rfs)
@@ -871,9 +930,17 @@ server <- function(input, output, session) {
 
   ### reset_random_factor ----
   observeEvent(input$reset_random_factor, {
+    # allow nesting in any random factor
+    updatePickerInput(session = session,
+                      inputId = "random_factor_nested_in",
+                      choices = names(random_factors()))
+
     updateRadioGroupButtons(session, "random_factor_type", selected = "crossed")
     reset("random_factor_name")
     reset("random_factor_n")
+    reset("random_intercept")
+    updateActionButton(session, "add_random_factor", label = "Add Factor")
+    new_random_factor_box_title("New Random Factor")
   })
 
   ## fixed factors ----
@@ -947,9 +1014,10 @@ server <- function(input, output, session) {
                       selected = factor_params$by)
     updatePickerInput(session, "fixed_factor_coding",
                       selected = factor_params$coding)
-
     updateSwitchInput(session, "fixed_factor_shuffle",
                       value = factor_params$shuffle)
+    updateTextInput(session, "fixed_factor_effect",
+                    value = paste(factor_params$effect, collapse = ", "))
 
     for (i in 1:n_levels) {
       nm <- paste0("fixed_level_name_", i)
@@ -961,6 +1029,10 @@ server <- function(input, output, session) {
       updateTextInput(session, nm, value = val)
     }
 
+    glue("Edit Fixed Factor ({input$edit_fixed_factor})") %>%
+      new_fixed_factor_box_title()
+    updateActionButton(session, "add_fixed_factor", "Edit Factor")
+
     show("new_fixed_factor_box", anim = TRUE)
   })
 
@@ -970,6 +1042,7 @@ server <- function(input, output, session) {
     # get existing list of fixed factors
     ffs <- fixed_factors()
     ran_names <- names(random_factors())
+    n_levels <- as.integer(input$fixed_levels_n)
 
     factor_name <- input$fixed_factor_name %else%
       setdiff(LETTERS, c(names(ffs), ran_names))[[1]]
@@ -981,12 +1054,12 @@ server <- function(input, output, session) {
 
     level_names <- indexed_input(
       "fixed_level_name_",
-      1:input$fixed_levels_n,
+      1:n_levels,
       input) %>%
       replace_missing(paste0(factor_name, "_", 1:10))
 
     level_probs <- indexed_input(
-      "fixed_level_prob_",  1:input$fixed_levels_n, input
+      "fixed_level_prob_",  1:n_levels, input
     ) %>%
       unlist() %>%
       as.numeric()
@@ -994,12 +1067,21 @@ server <- function(input, output, session) {
     # replace NAs with 0
     level_probs[is.na(level_probs)] <- 0
 
+    # parse effect
+    effect <- input$fixed_factor_effect %>%
+      strsplit("\\s*,\\s*") %>%
+      `[[`(1) %>%
+      as.numeric() %>%
+      tidyr::replace_na(0) %>%
+      rep(length.out = n_levels - 1)
+
     ffs[[factor_name]] <- list(
       by = if (input$fixed_factor_type == "within") { NULL } else { input$fixed_factor_by },
       levels = level_names,
       shuffle = input$fixed_factor_shuffle,
       prob = level_probs,
-      coding = input$fixed_factor_coding
+      coding = input$fixed_factor_coding,
+      effect = effect
     )
 
     fixed_factors(ffs)
@@ -1029,15 +1111,30 @@ server <- function(input, output, session) {
 
     reset("fixed_factor_name")
     reset("fixed_levels_n")
+    reset("fixed_factor_coding")
+    reset("fixed_factor_effect")
 
     paste0("fixed_level_name_", 1:8) %>%
       lapply(reset)
 
     paste0("fixed_level_prob_", 1:8) %>%
       lapply(reset)
+
+    updateActionButton(session, "add_fixed_factor", "Add Factor")
+    new_fixed_factor_box_title("New Fixed Factor")
   })
 
   ## multilevel outputs ----
+
+  ### new_random_factor_box_title ----
+  output$new_random_factor_box_title <- renderText({
+    new_random_factor_box_title()
+  })
+
+  ### new_fixed_factor_box_title ----
+  output$new_fixed_factor_box_title <- renderText({
+    new_fixed_factor_box_title()
+  })
 
   ### current_random_factors ----
   output$current_random_factors <- renderUI({
@@ -1057,6 +1154,22 @@ server <- function(input, output, session) {
   }, rownames = FALSE,
      options = list(pageLength = 25)
   )
+
+  model <- eventReactive(input$run_model, {
+    fm <- as.formula(input$mixed_formula)
+    tryCatch({
+      lme4::lmer(formula = fm, data = ml_data())
+    }, error = function(e) {
+      message(e$msg)
+      return(NULL)
+    })
+  })
+
+  ### multi_model ----
+  output$multi_model <- renderText({
+    req(model())
+    capture.output(summary(model())) %>% paste(collapse = "\n")
+  })
 
   ## download_ml_data ----
   output$download_ml_data <- downloadHandler(

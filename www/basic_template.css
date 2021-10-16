@@ -7,7 +7,7 @@
   --green: rgb(0, 166, 90);
   --blue: rgb(60, 141, 188);
   --purple: rgb(96, 92, 168);
-  
+
   --tgrey: rgba(34,45,50,.5);
   --tred: rgba(221, 75, 57,.5);
   --tyellow: rgba(243, 156, 18,.5);
@@ -118,14 +118,19 @@ ul.sidebar-menu {
 }
 
 /* action button skins */
-.action-button {
+.action-button, .shiny-download-link {
   background-color: var(--grey);
   color: white;
   font-weight: bold;
 }
-.skin-purple .action-button { background-color: var(--purple); }
-.skin-red .action-button { background-color: var(--red); }
-.skin-blue .action-button { background-color: var(--blue); }
-.skin-green .action-button { background-color: var(--green); }
-.skin-yellow .action-button { background-color: var(--yellow); }
+.skin-purple .action-button,
+.skin-purple .shiny-download-link { background-color: var(--purple); }
+.skin-red .action-button,
+.skin-red .shiny-download-link { background-color: var(--red); }
+.skin-blue .action-button,
+.skin-blue .shiny-download-link { background-color: var(--blue); }
+.skin-green .action-button,
+.skin-green .shiny-download-link { background-color: var(--green); }
+.skin-yellow .action-button,
+.skin-yellow .shiny-download-link { background-color: var(--yellow); }
 
