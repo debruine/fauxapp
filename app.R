@@ -69,10 +69,10 @@ server <- function(input, output, session) {
     updateTextInput(session, "mu", value = "8, 10, 4, 10, 10, 4")
     updateTextInput(session, "sd", value = "1")
     updateTextInput(session, "r", value = "0.5")
-    updateAwesomeRadio(session, "empirical", selected = "population")
+    updateRadioGroupButtons(session, "empirical", selected = "population")
 
-    runjs("closeBox('new_factor_box')")
-    runjs("openBox('cell_params_box')")
+    hide("new_factor_box", anim = TRUE)
+    show("cell_params_box", anim = TRUE)
   })
 
   # demo_data2 ----
@@ -102,45 +102,31 @@ server <- function(input, output, session) {
     updateTextInput(session, "mu", value = "100, 100, 100, 100, 100, 90, 110, 110, 90")
     updateTextInput(session, "sd", value = "20")
     updateTextInput(session, "r", value = "0.5")
-    updateAwesomeRadio(session, "empirical", selected = "population")
+    updateRadioGroupButtons(session, "empirical", selected = "population")
 
-    runjs("closeBox('new_factor_box')")
-    runjs("openBox('cell_params_box')")
+    hide("new_factor_box", anim = TRUE)
+    show("cell_params_box", anim = TRUE)
   })
 
   # parameters ----
   ## bcells ----
-  bcells <- reactive(if (length(between()) == 0) {
-    1
-  } else {
-    sapply(between(), length) %>% prod()
+  bcells <- reactive({
+    sapply(between() %else% 1, length) %>% prod()
   })
 
   ## wcells ----
-  wcells <- reactive(if (length(within()) == 0) {
-    1
-  } else {
-    sapply(within(), length) %>% prod()
+  wcells <- reactive({
+    sapply(within() %else% 1, length) %>% prod()
   })
 
   ## dv ----
   dv <- reactive({
-    name <- trimws(input$dv_name)
-    label <- trimws(input$dv_label)
-
-    if (name == "") name <- "y"
-    if (label == "") label <- name
-    setNames(label, name)
+    name_label(input$dv_name, input$dv_label)
   })
 
   ## id ----
   id <- reactive({
-    name <- trimws(input$id_name)
-    label <- trimws(input$id_label)
-
-    if (name == "") name <- "id"
-    if (label == "") label <- name
-    setNames(label, name)
+    name_label(input$id_name, input$id_label)
   })
 
   ## n ----
@@ -202,42 +188,44 @@ server <- function(input, output, session) {
     updateRadioGroupButtons(session, "factor_type", selected = factor_type)
     updateTextInput(session, "factor_name", value = input$edit_factor)
     updateTextInput(session, "factor_label", value = factor_label)
+
+    # update levels
     n <- length(levels)
     updatePickerInput(session, "levels_n", selected = n)
 
     for (i in 1:n) {
-      updateTextInput(session, paste0("level_name_", i), value = names(levels)[[i]])
-      updateTextInput(session, paste0("level_display_", i), value = levels[[i]])
+      updateTextInput(session,
+                      inputId = paste0("level_name_", i),
+                      value = names(levels)[[i]])
+      updateTextInput(session,
+                      inputId = paste0("level_display_", i),
+                      value = levels[[i]])
     }
 
     updateTextInput(session, "edit_factor", value = NULL)
-    runjs("openBox('new_factor_box')")
+    show("new_factor_box", anim = TRUE)
   })
 
   ## add_factor ----
   observeEvent(input$add_factor, {
     # check factor_name is set
     factor_name <- trimws(input$factor_name)
-    if (factor_name == "")
-      return()
+    if (factor_name == "") return()
 
     # get list of level names and display
-    level_names <- paste0("level_name_", 1:input$levels_n) %>%
-      lapply(function(x)
-        input[[x]]) %>%
-      trimws()
-    level_displays <- paste0("level_display_", 1:input$levels_n) %>%
-      lapply(function(x)
-        input[[x]]) %>%
-      trimws()
+    level_names <-
+      indexed_input("level_name_", 1:input$levels_n, input)
+    level_displays <-
+      indexed_input("level_display_", 1:input$levels_n, input)
 
     # auto-fill missing level names
-    level_names[level_names == ""] <-
-      paste0("level", which(level_names == ""))
+    level_names <- replace_missing(
+      level_names,
+      paste0(input$factor_name, 1:10)
+    )
 
     # replace missing level display names with level names
-    level_displays <-
-      ifelse(level_displays == "", level_names, level_displays)
+    level_displays <- replace_missing(level_displays, level_names)
 
     # remove any old factor with the same name
     w <- within()
@@ -256,7 +244,7 @@ server <- function(input, output, session) {
 
     # update vardesc
     vd <- vardesc()
-    vd[[factor_name]] <- if (input$factor_label == "") factor_name else input$factor_label
+    vd[[factor_name]] <- input$factor_label %else% factor_name
     vardesc(vd)
 
     reset_factor_box()
@@ -302,6 +290,9 @@ server <- function(input, output, session) {
 
     within(list())
     between(list())
+    sim_data(NULL)
+    data_params_table(NULL)
+
     reset_factor_box()
   })
 
@@ -350,6 +341,8 @@ server <- function(input, output, session) {
   observeEvent(design(), {
     # only enable after there is a valid design
     sim_data(NULL)
+    data_params_table(NULL)
+
     valid_design <- !is.null(design())
     toggleState("simulate_data", valid_design)
 
@@ -358,6 +351,40 @@ server <- function(input, output, session) {
       showTab(inputId = "sim_tabs", target = "Design Parameters", select = TRUE)
     }
   }, ignoreNULL = FALSE, ignoreInit = FALSE)
+
+  ## empirical ----
+  observeEvent(input$empirical, {
+    # only resimulate data if there is data
+    if (!is.null(sim_data())) click("simulate_data")
+  })
+
+  ## factor_name ----
+  observeEvent(input$factor_name, {
+    # update factor_display placeholder
+    updateTextInput(inputId = "factor_label",
+                    placeholder = input$factor_name %else% "Display Label")
+
+    # update level placeholders
+    lapply(1:8, function(i) {
+      level_id <- paste0("level_name_", i)
+      level_name <- paste0(input$factor_name %else% "level", "_", i)
+      updateTextInput(inputId = level_id,
+                      placeholder = level_name)
+      level_display <- input[[level_id]] %else% level_name
+      updateTextInput(inputId = paste0("level_display_", i),
+                      placeholder = level_display)
+    })
+  })
+
+  observeEvent(c(input$level_name_1, input$level_name_2, input$level_name_3, input$level_name_4, input$level_name_5, input$level_name_6, input$level_name_7, input$level_name_8), {
+    for (i in 1:8) {
+      level_id <- paste0("level_name_", i)
+      level_name <- paste0(input$factor_name %else% "level", "_", i)
+      level_display <- input[[level_id]] %else% level_name
+      updateTextInput(inputId = paste0("level_display_", i),
+                      placeholder = level_display)
+    }
+  })
 
   ## simulate_data ----
   observeEvent(input$simulate_data, {
@@ -406,9 +433,12 @@ server <- function(input, output, session) {
   ## sim_data update ----
   observeEvent(sim_data(), {
     message("--sim_data--")
-    # only enable after there is data to reshape
+
+    # only enable after there is data
     valid_data <- !is.null(sim_data())
-    toggleState("download_data", valid_data)
+    toggleState("download_data", condition = valid_data)
+    toggle("palette", condition = valid_data)
+    toggle("data_geoms", condition = valid_data)
 
     # change tab if in a design tab
     if (valid_data & input$sim_tabs %in% c("Design Parameters", "Design Plot", "Code")) {
@@ -559,6 +589,15 @@ server <- function(input, output, session) {
                       geoms = input$design_geoms)
   }, res = 96)
 
+  ## data_plot_msg ----
+  output$data_plot_msg <- renderText({
+    if (is.null(sim_data())) {
+      "Click the 'Simulate Data' button to simulate a new dataset with this design."
+    } else {
+      "The plot shows the distribution for the simulated data."
+    }
+  })
+
   ## data_plot ----
   output$data_plot <- renderPlot({
     req(display_data())
@@ -570,18 +609,30 @@ server <- function(input, output, session) {
   ## design_params_table ----
   output$design_params_table <- renderDT({
     design_params_table()
-  }, rownames = FALSE,
-     select= "none",
-     #selection = list(mode = "single", target = "cell"),
-     editable = FALSE,
+  }, select= "none",
+     rownames = FALSE,
      options = dt_opts())
+
+  ## data_param_table_msg ----
+  output$data_param_table_msg <- renderText({
+    if (is.null(data_params_table())) {
+      "Click the 'Simulate Data' button to simulate a new dataset with this design."
+    }
+  })
 
   ## data_params_table ----
   output$data_params_table <- renderDT({
     data_params_table()
-  }, rownames = FALSE,
-     select = "none",
+  }, select = "none",
+     rownames = FALSE,
      options = dt_opts())
+
+  ## sim_data_msg ----
+  output$sim_data_msg <- renderText({
+    if (is.null(sim_data())) {
+      "Click the 'Simulate Data' button to simulate a new dataset with this design."
+    }
+  })
 
   ## sim_data ----
   output$sim_data <- renderDT({
@@ -762,7 +813,7 @@ server <- function(input, output, session) {
     updatePickerInput(session, "random_factor_nested_in",
                       selected = factor_params$nested_in)
 
-    runjs("openBox('new_random_factor_box')")
+    show("new_random_factor_box", anim = TRUE)
   })
 
   ### add_random_factor ----
@@ -864,7 +915,7 @@ server <- function(input, output, session) {
       updateTextInput(session, nm, value = val)
     }
 
-    runjs("openBox('new_fixed_factor_box')")
+    show("new_fixed_factor_box", anim = TRUE)
   })
 
   ### add_fixed_factor ----
@@ -873,12 +924,12 @@ server <- function(input, output, session) {
     # get existing list of fixed factors
     ffs <- fixed_factors()
 
-    level_names <- paste0("fixed_level_name_", 1:input$fixed_levels_n) %>%
-      lapply(function(x) input[[x]]) %>%
-      trimws()
+    level_names <-
+      indexed_input("fixed_level_name_", 1:input$fixed_levels_n, input)
 
-    level_probs <- paste0("fixed_level_prob_", 1:input$fixed_levels_n)%>%
-      lapply(function(x) input[[x]]) %>%
+    level_probs <- indexed_input(
+      "fixed_level_prob_",  1:input$fixed_levels_n, input
+    ) %>%
       unlist() %>%
       as.numeric()
 

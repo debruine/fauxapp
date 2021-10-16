@@ -30,7 +30,11 @@ faux_options(plot = FALSE)
   if (is.null(l)) r else l
 }
 
-# boxes to hold parameters ----
+`%else%` <- function(l, r) {
+  if (length(l) == 0 || all(l == "")) r else l
+}
+
+# boxes to hold parameters
 param_box <- function(title, ..., collapsed = FALSE) {
   box(title = title,
       width = 12,
@@ -38,6 +42,32 @@ param_box <- function(title, ..., collapsed = FALSE) {
       collapsed = collapsed,
       solidHeader = TRUE,
       ...)
+}
+
+# process DV and ID
+name_label <- function(name, label) {
+  name <- trimws(name)
+  label <- trimws(label)
+
+  if (name == "") name <- "y"
+  if (label == "") label <- name
+  setNames(label, name)
+}
+
+# get multiple inputs with indices
+indexed_input <- function(base_name, indices, input) {
+  paste0(base_name, indices) %>%
+    lapply(function(x)
+      input[[x]]) %>%
+    trimws()
+}
+
+# replace missing values in a vector
+replace_missing <- function(x, replace, missing_value = "") {
+  replace <- rep(replace, length.out = length(x))
+  missing <- x == missing_value
+  x[missing] <- replace[missing]
+  x
 }
 
 # make text inputs for n level labels
@@ -154,5 +184,4 @@ ctnr <- function(param_table, n_factors) {
     )
   ))
 }
-
 

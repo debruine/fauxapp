@@ -8,4 +8,6 @@ X between fixed factors need to use shuffle and prob
 X adding fixed factors without random factors borks the app
 - learn why I need to use vapply
 
-- single level data plots/table need warning to push the button
+
+X single level data plots/table need warning to push the button
+X clear simulated data when design changes

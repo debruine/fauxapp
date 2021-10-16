@@ -93,7 +93,7 @@ factorial_tab <- tabItem(tabName = "factorial_tab",
         "Distribution",
         id = "distribution_box",
         p(
-          "This section is very experimental. Carefully check your data if you use this."
+          "This section is very experimental and not complete. Carefully check your data if you change the value from normal."
         ),
         pickerInput(
           "dv_distribution",
@@ -143,17 +143,17 @@ factorial_tab <- tabItem(tabName = "factorial_tab",
             ),
             column(
               4,
-              awesomeRadio(
+              radioGroupButtons(
                 "long",
                 "Data format",
                 choices = c("long" = TRUE, "wide" = FALSE),
-                inline = TRUE
+                checkIcon = list(yes = icon("ok", lib = "glyphicon"))
               ),
-              awesomeRadio(
+              radioGroupButtons(
                 "empirical",
                 "Parameters decribe the...",
                 choices = c("population", "sample"),
-                inline = TRUE
+                checkIcon = list(yes = icon("ok", lib = "glyphicon"))
               )
 
             ),
@@ -188,55 +188,48 @@ factorial_tab <- tabItem(tabName = "factorial_tab",
           )
         ),
         ### data_params_table ----
-        tabPanel("Data Parameters", DTOutput("data_params_table")),
+        tabPanel("Data Parameters",
+                 textOutput("data_param_table_msg"),
+                 DTOutput("data_params_table")
+        ),
         ### data_plot ----
         tabPanel(
           "Data Plot",
-          p("The plot describes the data you simulated."),
-
-          pickerInput(
-            "palette",
-            NULL,
-            choices = c(
-              "Dark2",
-              "Spectral",
-              "Accent",
-              "Paired",
-              "Pastel1",
-              "Pastel2",
-              "Set1",
-              "Set2",
-              "Set3",
-              "Reds",
-              "Oranges",
-              "Greens",
-              "Blues",
-              "Purples",
-              "Greys"
-            ),
-            inline = TRUE
-          ),
-
+          textOutput("data_plot_msg"),
           plotOutput("data_plot"),
-          checkboxGroupButtons(
-            "data_geoms",
-            NULL,
-            choices = c("pointrangeSD",
-                        "pointrangeSE",
-                        "violin",
-                        "box",
-                        "jitter"),
-            selected = c("violin", "box"),
-            checkIcon = list(
-              yes = tags$i(class = "fa fa-check-square",
-                           style = "color: rgb(96, 92, 168)"),
-              no = tags$i(class = "fa fa-square-o",
-                          style = "color: rgb(96, 92, 168)")
-            )
+          fluidRow(
+            column(2, hidden(pickerInput(
+              "palette",
+              NULL,
+              choices = c(
+                "Dark2", "Spectral", "Accent", "Paired",
+                "Pastel1", "Pastel2", "Set1", "Set2", "Set3",
+                "Reds", "Oranges", "Greens", "Blues", "Purples", "Greys"
+              ),
+              inline = TRUE
+            ))),
+            column(10, hidden(checkboxGroupButtons(
+              "data_geoms",
+              NULL,
+              choices = c("pointrangeSD",
+                          "pointrangeSE",
+                          "violin",
+                          "box",
+                          "jitter"),
+              selected = c("violin", "box"),
+              checkIcon = list(
+                yes = tags$i(class = "fa fa-check-square",
+                             style = "color: rgb(96, 92, 168)"),
+                no = tags$i(class = "fa fa-square-o",
+                            style = "color: rgb(96, 92, 168)")
+              )
+            )))
           )
         ),
         ### sim_data ----
-        tabPanel("Data", DTOutput("sim_data")),
+        tabPanel("Data",
+                 textOutput("sim_data_msg"),
+                 DTOutput("sim_data")),
         ### code ----
         tabPanel(
           "Code",
