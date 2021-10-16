@@ -703,15 +703,18 @@ server <- function(input, output, session) {
     ))
 
     fixed_factors(list(
-      condition = list(by = NULL, levels = c("A", "B")),
+      condition = list(by = NULL,
+                       levels = c("A", "B"),
+                       coding = "anova"),
       grade = list(by = "student",
                    levels = 1:3,
                    shuffle = TRUE,
-                   prob = c(1, 2, 3))
+                   prob = c(1, 2, 3),
+                   coding = "treatment")
     ))
   })
 
-  ## sim data ----
+  ## sim mixed data ----
   observe({
     if (length(random_factors()) == 0) return()
 
@@ -746,6 +749,16 @@ server <- function(input, output, session) {
         args[[".prob"]] <- factor_params$prob
         new_data <- do.call(what = add_between, args = args)
       }
+    }
+
+    ## add contrasts
+    for (factor in names(fixed_factors())) {
+      factor_params <- fixed_factors()[[factor]]
+      new_data <- faux::add_contrast(
+        data = new_data,
+        col = factor,
+        contrast = factor_params$coding
+      )
     }
 
     ml_data(new_data)
@@ -820,10 +833,18 @@ server <- function(input, output, session) {
   observeEvent(input$add_random_factor, {
     # get existing list of random factors
     rfs <- random_factors()
+    fix_names <- names(fixed_factors())
 
     # get new factor parameters
-    factor_name <- trimws(input$random_factor_name)
-    factor_n <- as.integer(input$random_factor_n)
+    factor_name <- trimws(input$random_factor_name) %else%
+      setdiff(LETTERS, c(names(rfs), fix_names))[[1]]
+
+    if (factor_name %in% fix_names) {
+      showNotification("Random factors cannot have the same name as a fixed factor", duration = 30)
+      return(NULL)
+    }
+
+    factor_n <- as.integer(input$random_factor_n) %else% 1
     nested_in <- if (input$random_factor_type == "nested") {
       input$random_factor_nested_in
     } else {
@@ -859,12 +880,36 @@ server <- function(input, output, session) {
 
   ### fixed_levels_n ----
   observeEvent(input$fixed_levels_n, {
-    to_show <- paste0("fixed_label_row_", 1:input$fixed_levels_n)
+    message("--fixed_levels_n--")
+
+    n <- as.integer(input$fixed_levels_n)
+    to_show <- paste0("fixed_label_row_", 1:n)
     h <- setdiff(1:8, 1:input$fixed_levels_n)
     to_hide <- paste0("fixed_label_row_", h)
 
     lapply(to_show, show)
     lapply(to_hide, hide)
+  })
+
+  ### fixed_factor_coding ----
+  observe({
+    message("--fixed_factor_coding--")
+
+    n <- as.integer(input$fixed_levels_n)
+
+    contrasts <- data.frame(x = as.factor(1:n)) %>%
+      faux::add_contrast("x", contrast = input$fixed_factor_coding) %>%
+      dplyr::select(-x) %>%
+      mutate_all(round, 3) %>%
+      tidyr::unite(contrast, 1:(n-1), sep = ", ") %>%
+      dplyr::pull(contrast)
+
+    for (i in 1:n) {
+      updateTextInput(inputId = paste0("fixed_level_code_", i),
+                      value = contrasts[i],
+                      placeholder = contrasts[i])
+      disable(paste0("fixed_level_code_", i))
+    }
   })
 
   ### fixed_factor_type ----
@@ -879,7 +924,7 @@ server <- function(input, output, session) {
     # hide / show prob
     probs <- paste0("fixed_level_prob_", 1:8)
     func <- ifelse(input$fixed_factor_type == "between", show, hide)
-    c(probs, "probability_header") %>%
+    c(probs, "prob_header") %>%
       lapply(func)
   })
 
@@ -900,10 +945,11 @@ server <- function(input, output, session) {
                             selected = sel)
     updatePickerInput(session, "fixed_factor_by",
                       selected = factor_params$by)
+    updatePickerInput(session, "fixed_factor_coding",
+                      selected = factor_params$coding)
 
-    sel <- ifelse(factor_params$shuffle, "yes", "no")
-    updateRadioGroupButtons(session, "fixed_factor_shuffle",
-                            selected = sel)
+    updateSwitchInput(session, "fixed_factor_shuffle",
+                      value = factor_params$shuffle)
 
     for (i in 1:n_levels) {
       nm <- paste0("fixed_level_name_", i)
@@ -923,9 +969,21 @@ server <- function(input, output, session) {
     message("--add_fixed_factor--")
     # get existing list of fixed factors
     ffs <- fixed_factors()
+    ran_names <- names(random_factors())
 
-    level_names <-
-      indexed_input("fixed_level_name_", 1:input$fixed_levels_n, input)
+    factor_name <- input$fixed_factor_name %else%
+      setdiff(LETTERS, c(names(ffs), ran_names))[[1]]
+
+    if (factor_name %in% ran_names) {
+      showNotification("Fixed factors cannot have the same name as a random factor", duration = 30)
+      return(NULL)
+    }
+
+    level_names <- indexed_input(
+      "fixed_level_name_",
+      1:input$fixed_levels_n,
+      input) %>%
+      replace_missing(paste0(factor_name, "_", 1:10))
 
     level_probs <- indexed_input(
       "fixed_level_prob_",  1:input$fixed_levels_n, input
@@ -936,11 +994,12 @@ server <- function(input, output, session) {
     # replace NAs with 0
     level_probs[is.na(level_probs)] <- 0
 
-    ffs[[input$fixed_factor_name]] <- list(
+    ffs[[factor_name]] <- list(
       by = if (input$fixed_factor_type == "within") { NULL } else { input$fixed_factor_by },
       levels = level_names,
-      shuffle = input$fixed_factor_shuffle == "yes",
-      prob = level_probs
+      shuffle = input$fixed_factor_shuffle,
+      prob = level_probs,
+      coding = input$fixed_factor_coding
     )
 
     fixed_factors(ffs)
@@ -966,7 +1025,7 @@ server <- function(input, output, session) {
   ### reset_fixed_factor ----
   observeEvent(input$reset_fixed_factor, {
     updateRadioGroupButtons(session, "fixed_factor_type", selected = "within")
-    updateRadioGroupButtons(session, "fixed_factor_shuffle", selected = "no")
+    updateSwitchInput(session, "fixed_factor_shuffle", value = FALSE)
 
     reset("fixed_factor_name")
     reset("fixed_levels_n")
@@ -997,6 +1056,16 @@ server <- function(input, output, session) {
     ml_data()
   }, rownames = FALSE,
      options = list(pageLength = 25)
+  )
+
+  ## download_ml_data ----
+  output$download_ml_data <- downloadHandler(
+    filename = function() {
+      "data.csv"
+    },
+    content = function(file) {
+      readr::write_csv(ml_data(), file)
+    }
   )
 
 

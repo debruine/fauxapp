@@ -31,7 +31,7 @@ faux_options(plot = FALSE)
 }
 
 `%else%` <- function(l, r) {
-  if (length(l) == 0 || all(l == "")) r else l
+  if (length(l) == 0 || all(is.na(l)) || all(l == "")) r else l
 }
 
 # boxes to hold parameters
@@ -96,13 +96,16 @@ fixed_level_labels <- function(n = 8) {
     ph <- paste0("level", i)
     table_label <- textInput(nm, NULL, placeholder = ph)
 
-    nm <- paste0("fixed_level_prob_", i)
-    prob <- numericInput(nm, NULL, value = 1,
-                         min = 0, max = 1e6)
+    nm <- paste0("fixed_level_code_", i)
+    coding <- textInput(nm, NULL, value = "")
 
-    fillRow(flex = c(8, 4), height = "2.5em",
+    nm <- paste0("fixed_level_prob_", i)
+    prob <- numericInput(nm, NULL, value = 1, min = 0)
+
+    fillRow(flex = c(4, 6, 2), height = "2.5em",
             id = paste0("fixed_label_row_", i),
             table_label,
+            coding,
             prob
     )
   })

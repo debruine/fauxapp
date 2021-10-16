@@ -1,12 +1,13 @@
 multilevel_tab <- tabItem(tabName = "multilevel_tab",
   fluidRow(
     ##inputs----
-    column(5,
+    column(6,
            ### buttons ----
            box(
              width = 12,
              actionButton("demo_mixed", "Demo"),
-             actionButton("clear_mixed_design", "Clear Design")
+             actionButton("clear_mixed_design", "Clear Design"),
+             downloadButton("download_ml_data", "Download Data")
            ),
            ### current random factors ----
            param_box(
@@ -35,26 +36,36 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
                           icon = icon("minus")),
              actionButton("reset_random_factor", "Reset",
                           icon = icon("broom"))
-           ),
+           )
+    ),
+    column(6,
            ### new fixed factor ----
            param_box(
              "New Fixed Factor",
              id = "new_fixed_factor_box",
-             radioGroupButtons(
-               "fixed_factor_type",
-               choices = c("within", "between"),
-               checkIcon = list(yes = icon("ok", lib = "glyphicon"))
-             ),
-             radioGroupButtons(
-               "fixed_factor_shuffle",
-               label = "Shuffle order",
-               choices = c("no", "yes"),
-               checkIcon = list(yes = icon("ok", lib = "glyphicon"))
-             ),
-             hidden(pickerInput(inputId = "fixed_factor_by",
-                                label = "by",
-                                choices = c(""))),
+             fluidRow(
+               column(4, radioGroupButtons(
+                 "fixed_factor_type",
+                 choices = c("within", "between"),
+                 checkIcon = list(yes = icon("ok", lib = "glyphicon"))
+               )),
+               column(4, hidden(pickerInput(inputId = "fixed_factor_by",
+                                         label = NULL,
+                                         choices = c("")))),
+               column(4, hidden(
+                 switchInput(
+                   inputId = "fixed_factor_shuffle",
+                   label = "shuffle",
+                   labelWidth = "80px"
+                 )
+               ))
+              ),
              textInput(inputId = "fixed_factor_name", label = "Name"),
+
+             pickerInput(inputId = "fixed_factor_coding",
+                         label = "Contrast Coding",
+                         choices = c("anova", "sum", "treatment", "helmert", "poly", "difference"),
+                         selected = "anova"),
 
              fillRow(
                flex = c(4, 8),
@@ -65,13 +76,16 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
              ),
 
              fillRow(
-               flex = c(8, 4),
+               flex = c(4, 6, 2),
                height = "2em",
                tags$strong("Level Name",
                            style = "color: rgb(96, 92, 168)"),
-               tags$strong("Probability",
-                           id = "probability_header",
-                           style = "color: rgb(96, 92, 168)")
+               tags$strong("Coding",
+                           style = "color: rgb(96, 92, 168)"),
+               tags$strong("Proportion",
+                           id = "prob_header",
+                           style = "color: rgb(96, 92, 168)",
+                           title = "Relative probability of the levels. Sampled unless the total is equal to the N.")
              ),
 
              hidden(fixed_level_labels(8)),
@@ -83,11 +97,9 @@ multilevel_tab <- tabItem(tabName = "multilevel_tab",
              actionButton("reset_fixed_factor", "Reset",
                           icon = icon("broom"))
            )
-    ),
-
-    ## Outputs ----
-    column(7,
-           DTOutput("multilevel_data")
     )
-  )
+  ),
+
+  ## Outputs ----
+  DTOutput("multilevel_data")
 )
